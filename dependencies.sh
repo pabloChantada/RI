@@ -24,7 +24,7 @@ source "$ENV_DIR/bin/activate"
 # Instalar dependencias necesarias
 echo "Installing dependencies for $ENV_DIR"
 pip install --upgrade pip
-pip install robobopy robobosim gymnasium stable-baselines3
+pip install robobopy robobosim gymnasium stable-baselines3 pygame
 
 echo "Environment created successfully"
 
