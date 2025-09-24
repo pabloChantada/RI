@@ -22,14 +22,16 @@ from robobosim.RoboboSim import RoboboSim
 import time
 
 class CylinderEnv(gym.Env):
-    def __init__(self, size: int = 10):
+    def __init__(self, size: int = 10, max_steps: int = 30):
         super().__init__()
         
         # The size of the square grid (10x10 by default)
         self.size = size
-        self.max_steps = 100  # Maximum steps per episode
+        self.max_steps = max_steps  # Maximum steps per episode
         self.current_step = 0
-        
+        self.acumulated_actions = 0
+        self.current_action = None 
+
         # Connect to Robobo simulator
         self.robobo = Robobo("localhost")
         self.robobo.connect()
@@ -119,22 +121,38 @@ class CylinderEnv(gym.Env):
     def step(self, action):
         """Execute one timestep within the environment"""
         self.current_step += 1
-        
+              
+        match action:
+            case 0:
+                print("Action: Move forward")
+            case 1:
+                print("Action: Turn left")
+            case 2:
+                print("Action: Turn right")
+            case 3:
+                print("Action: Move backward")
+
         try:
             if action == 0:  # Move forward
-                self.robobo.moveWheelsByTime(20, 20, 0.5)
-            elif action == 1:  # Turn right
-                self.robobo.moveWheelsByTime(20, -20, 0.5)
-            elif action == 2:  # Turn left
-                self.robobo.moveWheelsByTime(-20, 20, 0.5)
+                self.robobo.moveWheelsByTime(20, 20, 0.25)
+            elif action == 1:  # Turn left
+                self.robobo.moveWheelsByTime(20, -20, 0.25)
+            elif action == 2:  # Turn right
+                self.robobo.moveWheelsByTime(-20, 20, 0.25)
             elif action == 3:  # Move backward
-                self.robobo.moveWheelsByTime(-20, -20, 0.5)
-            
+                self.robobo.moveWheelsByTime(-20, -20, 0.25)
+
             time.sleep(0.6)
             
         except Exception as e:
             print(f"Error executing action: {e}")
-        
+
+        if self.current_action is not None:
+            if action == self.current_action:
+                self.acumulated_actions += 1
+
+        self.current_action = action
+
         # Get new state
         observation = self._get_obs()
         info = self._get_info()
@@ -145,7 +163,7 @@ class CylinderEnv(gym.Env):
         reward = self._calculate_reward(current_distance)
         
         # Check termination conditions
-        terminated = current_distance < 0.5  # Reached target
+        terminated = current_distance < 150  # Reached target
         truncated = self.current_step >= self.max_steps  # Max steps reached
         
         # Update previous distance for next step
@@ -154,22 +172,32 @@ class CylinderEnv(gym.Env):
         return observation, reward, terminated, truncated, info
     
     def _calculate_reward(self, current_distance):
-        """Calculate reward based on distance to target"""
-        # Base reward for getting closer to target
-        distance_reward = (self.previous_distance - current_distance) * 10
-        print(f"Distance reward component: {distance_reward:.3f}")
-        # Large positive reward for reaching target
-        if current_distance < 50:
-            return 100.0
+        """Calculate normalized reward based on distance to target"""
+        # Normalize distance change to [-1, 1] range
+        max_distance = self.initial_distance if self.initial_distance > 0 else 1.0
+        distance_delta = self.previous_distance - current_distance
+        normalized_delta = distance_delta / max_distance
+
+        # Reward for getting closer
+        distance_reward = normalized_delta
+
+        # Large positive reward for reaching target (normalized)
+        if current_distance < 20:
+            return 1.0
+
+        if self.acumulated_actions > 3:
+            return -50.0
+        
 
         # Penalty for moving away from target
         if current_distance > self.previous_distance:
-            distance_penalty = -10.0
+            distance_penalty = -0.5
         else:
             distance_penalty = 0.0
 
         total_reward = distance_reward + distance_penalty
 
+        print(f"Reward: {total_reward:.3f}")
         return total_reward
     
     def close(self):
