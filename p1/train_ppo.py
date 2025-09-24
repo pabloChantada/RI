@@ -26,8 +26,13 @@ os.makedirs(LOG_DIR, exist_ok=True)
 os.makedirs(CKPT_DIR, exist_ok=True)
 os.makedirs(MODELS_DIR, exist_ok=True)
 
-env = CylinderEnv()
-Monitor(env, filename=os.path.join(LOG_DIR, "train_monitor.csv"))
+def make_env():
+    e = CylinderEnv()
+    e = Monitor(e, filename=os.path.join(LOG_DIR, "train_monitor.csv"))
+    return e
+
+env = DummyVecEnv([make_env])
+
 
 def train(model):
 

@@ -112,6 +112,10 @@ class CylinderEnv(gym.Env):
         # Get initial distance for reward calculation
         self.initial_distance = self._get_info()["distance"]
         self.previous_distance = self.initial_distance
+
+        self.acumulated_actions = 0
+        self.current_action = None
+
         
         observation = self._get_obs()
         info = self._get_info()
@@ -153,6 +157,13 @@ class CylinderEnv(gym.Env):
 
         self.current_action = action
 
+        if self.current_action is not None:
+            if action == self.current_action:
+                self.acumulated_actions += 1
+            else:
+                self.acumulated_actions = 0   # <--- RESET al cambiar de acción
+        self.current_action = action
+
         # Get new state
         observation = self._get_obs()
         info = self._get_info()
@@ -184,10 +195,9 @@ class CylinderEnv(gym.Env):
         # Large positive reward for reaching target (normalized)
         if current_distance < 20:
             return 1.0
-
-        if self.acumulated_actions > 3:
-            return -50.0
         
+        if self.acumulated_actions > 3:
+            return -0.2  
 
         # Penalty for moving away from target
         if current_distance > self.previous_distance:
@@ -195,7 +205,9 @@ class CylinderEnv(gym.Env):
         else:
             distance_penalty = 0.0
 
-        total_reward = distance_reward + distance_penalty
+        step_penalty = -0.01
+        total_reward = distance_reward + distance_penalty + step_penalty
+
 
         print(f"Reward: {total_reward:.3f}")
         return total_reward
