@@ -13,6 +13,9 @@
 # Usando otras librerias como seaborn para resultados en formato .png, .jpeg, etc.
 # Tambien es necesario guardar un plano 2D de las diferentes posiciones que a realizado el agente
 
+# Si la recompensa durante X acciones es negativa, seleccionar una nueva accion aleatoria 
+# o resetear el entorno
+
 
 from typing import Optional
 import gymnasium as gym
@@ -22,15 +25,13 @@ from robobosim.RoboboSim import RoboboSim
 import time
 
 class CylinderEnv(gym.Env):
-    def __init__(self, size: int = 10, max_steps: int = 30):
+    def __init__(self, size: int = 1000, max_steps: int = 30):
         super().__init__()
-        
-        # The size of the square grid (10x10 by default)
+
+        # The size of the square grid (1000x1000 by default)
         self.size = size
         self.max_steps = max_steps  # Maximum steps per episode
         self.current_step = 0
-        self.acumulated_actions = 0
-        self.current_action = None 
 
         # Connect to Robobo simulator
         self.robobo = Robobo("localhost")
@@ -44,8 +45,8 @@ class CylinderEnv(gym.Env):
         # Define observation space - continuous space for robot and target positions
         # Using Box space for continuous x, z coordinates. This indicates the min and max values for each dimension.
         self.observation_space = gym.spaces.Box(
-            low=np.array([-10.0, -10.0, -10.0, -10.0], dtype=np.float32),  # [agent_x, agent_z, target_x, target_z]
-            high=np.array([10.0, 10.0, 10.0, 10.0], dtype=np.float32),
+            low=np.array([-1000.0, -1000.0, -1000.0, -1000.0], dtype=np.float32),  # [agent_x, agent_z, target_x, target_z]
+            high=np.array([1000.0, 1000.0, 1000.0, 1000.0], dtype=np.float32),
             dtype=np.float32
         )
         
@@ -113,10 +114,6 @@ class CylinderEnv(gym.Env):
         self.initial_distance = self._get_info()["distance"]
         self.previous_distance = self.initial_distance
 
-        self.acumulated_actions = 0
-        self.current_action = None
-
-        
         observation = self._get_obs()
         info = self._get_info()
         
@@ -125,7 +122,8 @@ class CylinderEnv(gym.Env):
     def step(self, action):
         """Execute one timestep within the environment"""
         self.current_step += 1
-              
+
+        print(f"\nStep {self.current_step}/{self.max_steps}")
         match action:
             case 0:
                 print("Action: Move forward")
@@ -138,41 +136,29 @@ class CylinderEnv(gym.Env):
 
         try:
             if action == 0:  # Move forward
-                self.robobo.moveWheelsByTime(20, 20, 0.25)
+                self.robobo.moveWheelsByTime(20, 20, 0.5)
             elif action == 1:  # Turn left
-                self.robobo.moveWheelsByTime(20, -20, 0.25)
+                self.robobo.moveWheelsByTime(20, -20, 0.5)
             elif action == 2:  # Turn right
-                self.robobo.moveWheelsByTime(-20, 20, 0.25)
+                self.robobo.moveWheelsByTime(-20, 20, 0.5)
             elif action == 3:  # Move backward
-                self.robobo.moveWheelsByTime(-20, -20, 0.25)
+                self.robobo.moveWheelsByTime(-20, -20, 0.5)
 
             time.sleep(0.6)
             
         except Exception as e:
             print(f"Error executing action: {e}")
 
-        if self.current_action is not None:
-            if action == self.current_action:
-                self.acumulated_actions += 1
-
-        self.current_action = action
-
-        if self.current_action is not None:
-            if action == self.current_action:
-                self.acumulated_actions += 1
-            else:
-                self.acumulated_actions = 0   # <--- RESET al cambiar de acción
-        self.current_action = action
-
         # Get new state
         observation = self._get_obs()
         info = self._get_info()
         current_distance = info["distance"]
         print(f"Robot position: {info['agent_position']}, Target position: {info['target_position']}, Distance: {current_distance:.3f}")
-
+        
         # Calculate reward
         reward = self._calculate_reward(current_distance)
-        
+        print(f"---> Reward: {reward:.3f}")
+
         # Check termination conditions
         terminated = current_distance < 150  # Reached target
         truncated = self.current_step >= self.max_steps  # Max steps reached
@@ -184,6 +170,7 @@ class CylinderEnv(gym.Env):
     
     def _calculate_reward(self, current_distance):
         """Calculate normalized reward based on distance to target"""
+        '''
         # Normalize distance change to [-1, 1] range
         max_distance = self.initial_distance if self.initial_distance > 0 else 1.0
         distance_delta = self.previous_distance - current_distance
@@ -191,22 +178,22 @@ class CylinderEnv(gym.Env):
 
         # Reward for getting closer
         distance_reward = normalized_delta
+        '''
+
+        distance_reward = (self.initial_distance - current_distance) * 10
 
         # Large positive reward for reaching target (normalized)
         if current_distance < 20:
             return 1.0
         
-        if self.acumulated_actions > 3:
-            return -0.2  
-
         # Penalty for moving away from target
         if current_distance > self.previous_distance:
             distance_penalty = -0.5
         else:
             distance_penalty = 0.0
 
-        step_penalty = -0.01
-        total_reward = distance_reward + distance_penalty + step_penalty
+        # step_penalty = -0.01
+        total_reward = distance_reward + distance_penalty # + step_penalty
 
 
         print(f"Reward: {total_reward:.3f}")

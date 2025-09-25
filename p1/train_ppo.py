@@ -3,8 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-import gymnasium as gym
 from stable_baselines3 import PPO
+from stable_baselines3 import DQN
 from stable_baselines3.common.callbacks import EvalCallback, CheckpointCallback
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv
@@ -12,9 +12,8 @@ from stable_baselines3.common.evaluation import evaluate_policy
 
 from cylinder_env import CylinderEnv
 
-TOTAL_STEPS = 3
-TRAIN_STEPS = 3
-N_STEPS = 5
+TRAIN_STEPS = 10
+EPISODES = 3
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(BASE_DIR, "models")
@@ -26,24 +25,32 @@ os.makedirs(LOG_DIR, exist_ok=True)
 os.makedirs(CKPT_DIR, exist_ok=True)
 os.makedirs(MODELS_DIR, exist_ok=True)
 
+
 def make_env():
-    e = CylinderEnv()
-    e = Monitor(e, filename=os.path.join(LOG_DIR, "train_monitor.csv"))
+    monitor_filename = os.path.join(LOG_DIR, f"train_monitor.csv")
+    e = CylinderEnv(max_steps=TRAIN_STEPS)
+    e = Monitor(e, filename=monitor_filename)
     return e
 
-env = DummyVecEnv([make_env])
-
-
 def train(model):
-
     metrics = []
-    for _ in range(TRAIN_STEPS):
-        model.learn(total_timesteps=TOTAL_STEPS, callback=[eval_callback, ckpt_callback])
+    for i in range(EPISODES):
+        print(f"--- Entrenamiento: {i+1}/{EPISODES} ---")
+        env.reset()
+        model.learn(total_timesteps=TRAIN_STEPS, callback=[eval_callback, ckpt_callback])
         mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=2, deterministic=True)
-        metrics.append((mean_reward, std_reward, model))
+        metrics.append({"step": (i+1)*TRAIN_STEPS, "mean_reward": mean_reward, "std_reward": std_reward})
         print(f"Eval reward: mean={mean_reward:.2f} ± {std_reward:.2f}")
 
-    model = max(metrics, key=lambda x: x[0])[2]
+    # Save metrics to CSV
+    metrics_df = pd.DataFrame(metrics)
+    metrics_path = os.path.join(LOG_DIR, "ppo_metrics.csv")
+    metrics_df.to_csv(metrics_path, index=False)
+    print(f"Métricas guardadas en: {metrics_path}")
+
+    # Save best model
+    best_idx = metrics_df["mean_reward"].idxmax()
+    print(f"Mejor recompensa media: {metrics_df.loc[best_idx, 'mean_reward']:.2f}")
     model.save(FINAL_PATH)
     print(f"Modelo guardado en: {FINAL_PATH}.zip")
 
@@ -66,11 +73,14 @@ def plot_training_rewards():
     print(f"Gráfica guardada: {plot_path}")
 
 if __name__ == "__main__":
-    model = PPO(
+    
+    env = DummyVecEnv([make_env])
+
+    model_1 = PPO(
         policy="MlpPolicy",
         env=env,
-        n_steps=N_STEPS,
-        batch_size=64,
+        n_steps=TRAIN_STEPS,
+        batch_size=128,
         gamma=0.99,
         learning_rate=3e-4,
         gae_lambda=0.95,
@@ -79,6 +89,24 @@ if __name__ == "__main__":
         vf_coef=0.5,
         verbose=1,
     )
+
+    model_2  = DQN(
+        "MlpPolicy",
+        env,
+        batch_size=64,
+        n_steps=TRAIN_STEPS,
+        buffer_size=100000,
+        exploration_final_eps=0.04,
+        exploration_fraction=0.16,
+        gradient_steps=128,
+        learning_rate=0.0023,
+        learning_starts=1000,
+        policy_kwargs={"net_arch": [256, 256]},
+        target_update_interval=10,
+        train_freq=256,
+        verbose=1,
+    )
+
 
     eval_callback = EvalCallback(
         env,
@@ -94,5 +122,5 @@ if __name__ == "__main__":
         save_path=CKPT_DIR,
         name_prefix="ppo_cylinder",
     )
-    train(model)
+    train(model_1)
     plot_training_rewards()
