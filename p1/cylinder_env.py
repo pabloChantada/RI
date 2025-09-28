@@ -44,6 +44,8 @@ class CylinderEnv(gym.Env):
         
         # Define observation space - continuous space for robot and target positions
         # Using Box space for continuous x, z coordinates. This indicates the min and max values for each dimension.
+        
+        # TODO: DISCRETIZAR ESPACIO DE OBSERVACIONES
         self.observation_space = gym.spaces.Box(
             low=np.array([-1000.0, -1000.0, -1000.0, -1000.0], dtype=np.float32),  # [agent_x, agent_z, target_x, target_z]
             high=np.array([1000.0, 1000.0, 1000.0, 1000.0], dtype=np.float32),
@@ -124,6 +126,8 @@ class CylinderEnv(gym.Env):
         self.current_step += 1
 
         print(f"\nStep {self.current_step}/{self.max_steps}")
+
+        # TODO: discretizar acciones
         match action:
             case 0:
                 print("Action: Move forward")
@@ -183,7 +187,7 @@ class CylinderEnv(gym.Env):
         distance_reward = (self.initial_distance - current_distance) * 10
 
         # Large positive reward for reaching target (normalized)
-        if current_distance < 20:
+        if current_distance < 10:
             return 1.0
         
         # Penalty for moving away from target

@@ -34,11 +34,14 @@ def run_evaluation(env, model):
 def plot_trajectories(traj_agent, traj_target):
     """Plot 2D trajectories of agent and target"""
     ax = plt.figure().gca()
+    ax.set_xlim(-700, 700)
+    ax.set_ylim(-700, 700)
     ax.set_aspect("equal", adjustable="box")
     ax.plot([p[0] for p in traj_agent], [p[1] for p in traj_agent], label="Agente")
     ax.plot([p[0] for p in traj_target], [p[1] for p in traj_target], label="Cilindro", linestyle="--")
     ax.scatter(traj_agent[0][0], traj_agent[0][1], marker="o", label="Inicio agente")
     ax.scatter(traj_target[0][0], traj_target[0][1], marker="x", label="Inicio cilindro")
+    ax.scatter(traj_agent[-1][0], traj_agent[-1][1], marker="*", color="red", label="Fin agente")
     ax.grid(True); ax.legend()
     plt.xlabel("X"); plt.ylabel("Z"); plt.title("Trayectorias 2D")
     os.makedirs(LOGS_DIR, exist_ok=True)

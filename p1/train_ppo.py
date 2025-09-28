@@ -56,6 +56,9 @@ def train(model):
 
 def plot_training_rewards():
     """Plot training rewards from the Monitor CSV file"""
+
+    # TODO: hacer grafica por episodio individual no total
+
     # Gráfica de recompensa (rolling) para la memoria
     csv_path = os.path.join(LOG_DIR, "train_monitor.csv")
     df = pd.read_csv(csv_path, comment="#")
@@ -63,10 +66,16 @@ def plot_training_rewards():
     sns.set_context("talk")
     plt.figure()
     df.reset_index()
-    sns.lineplot(data=df, x='t', y="rolling_ep_rew_mean")
+    ax = sns.lineplot(data=df, x='t', y="rolling_ep_rew_mean")
     plt.xlabel("Episodios")
     plt.ylabel("Recompensa media (rolling 20)")
     plt.title("Evolución de recompensa (PPO)")
+
+    # Añadir líneas verticales para la división de episodios (cada 10 steps)
+    max_t = df["t"].max()
+    for ep in range(0, int(max_t)+1, 10):
+        plt.axvline(x=ep, color='gray', linestyle='--', alpha=0.3, label="Episode Mark")
+
     plt.tight_layout()
     plot_path = os.path.join(LOG_DIR, "ppo_training_rewards.png")
     plt.savefig(plot_path, dpi=150)
@@ -76,7 +85,7 @@ if __name__ == "__main__":
     
     env = DummyVecEnv([make_env])
 
-    model_1 = PPO(
+    model = PPO(
         policy="MlpPolicy",
         env=env,
         n_steps=TRAIN_STEPS,
@@ -89,24 +98,6 @@ if __name__ == "__main__":
         vf_coef=0.5,
         verbose=1,
     )
-
-    model_2  = DQN(
-        "MlpPolicy",
-        env,
-        batch_size=64,
-        n_steps=TRAIN_STEPS,
-        buffer_size=100000,
-        exploration_final_eps=0.04,
-        exploration_fraction=0.16,
-        gradient_steps=128,
-        learning_rate=0.0023,
-        learning_starts=1000,
-        policy_kwargs={"net_arch": [256, 256]},
-        target_update_interval=10,
-        train_freq=256,
-        verbose=1,
-    )
-
 
     eval_callback = EvalCallback(
         env,
@@ -122,5 +113,5 @@ if __name__ == "__main__":
         save_path=CKPT_DIR,
         name_prefix="ppo_cylinder",
     )
-    train(model_1)
+    train(model)
     plot_training_rewards()
