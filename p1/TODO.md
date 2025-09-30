@@ -11,6 +11,8 @@
 
 Análisis de lo que falta por hacer según el enunciado
 Basándome en el enunciado del PDF ("2025_2026_RIA_Practica01_Enunciado.pdf"), he revisado el código proporcionado (cylinder_env.py, train_ppo.py y eval_policy.py). Has implementado una base sólida: un entorno personalizado en Gymnasium, entrenamiento con PPO de StableBaselines3, evaluación del modelo cargado y gráficos de métricas y trayectorias. Sin embargo, hay varios puntos pendientes para cumplir al 100% con los objetivos y criterios de evaluación. Los divido por secciones del enunciado, destacando lo prioritario y sugerencias para completarlo. (Ignoro el fix de la gráfica 2D por ahora, como pediste, y lo trato al final).
+
+
 1. Objetivos concretos (página 1 del PDF)
 
 Acercarse al objeto (objetivo 1): Esto está parcialmente cubierto. El robot se acerca a un cilindro fijo usando posiciones directas del simulador. Funciona para posiciones iniciales fijas, pero no se prueba con posiciones iniciales aleatorias (el enunciado dice "independientemente de la posición inicial de cada objeto").
