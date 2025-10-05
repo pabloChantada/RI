@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from stable_baselines3 import PPO
-from stable_baselines3 import DQN
 from stable_baselines3.common.callbacks import EvalCallback, CheckpointCallback
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv
@@ -12,7 +11,7 @@ from stable_baselines3.common.evaluation import evaluate_policy
 
 from cylinder_env import CylinderEnv
 
-TRAIN_STEPS = 10
+TRAIN_STEPS = 100 
 EPISODES = 3
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -56,9 +55,6 @@ def train(model):
 
 def plot_training_rewards():
     """Plot training rewards from the Monitor CSV file"""
-
-    # TODO: hacer grafica por episodio individual no total
-
     # Gráfica de recompensa (rolling) para la memoria
     csv_path = os.path.join(LOG_DIR, "train_monitor.csv")
     df = pd.read_csv(csv_path, comment="#")

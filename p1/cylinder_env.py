@@ -23,14 +23,14 @@ import numpy as np
 from robobopy.Robobo import Robobo 
 from robobosim.RoboboSim import RoboboSim
 import time
+from robobopy.utils.BlobColor import BlobColor
 
 class CylinderEnv(gym.Env):
     def __init__(self, size: int = 1000, max_steps: int = 30):
         super().__init__()
 
-        # The size of the square grid (1000x1000 by default)
         self.size = size
-        self.max_steps = max_steps  # Maximum steps per episode
+        self.max_steps = max_steps
         self.current_step = 0
 
         # Connect to Robobo simulator
@@ -39,24 +39,79 @@ class CylinderEnv(gym.Env):
         self.sim = RoboboSim("localhost")
         self.sim.connect()
         
-        # Get initial positions (there's always one robot and one object)
+        # RED, GREEN, BLUE, CUSTOM
+        self.robobo.setActiveBlobs(True, False, False, False)
+        
+        # Adjust camera position
+        self.robobo.movePanTo(0, 50)
+        self.robobo.moveTiltTo(105, 50)
+        time.sleep(0.5)
+        
         self._object_id = list(self.sim.getObjects())[0] 
         
-        # Define observation space - continuous space for robot and target positions
-        # Using Box space for continuous x, z coordinates. This indicates the min and max values for each dimension.
-        
-        # TODO: DISCRETIZAR ESPACIO DE OBSERVACIONES
+        # [agent_x, agent_z, target_x, target_z, blob_visible, blob_x, blob_y, blob_size]
         self.observation_space = gym.spaces.Box(
-            low=np.array([-1000.0, -1000.0, -1000.0, -1000.0], dtype=np.float32),  # [agent_x, agent_z, target_x, target_z]
-            high=np.array([1000.0, 1000.0, 1000.0, 1000.0], dtype=np.float32),
+            low=np.array([
+                -100.0, -100.0,  # agent position
+                -100.0, -100.0,  # target position
+                0.0,               # blob_visible (0 o 1)
+                0.0, 0.0,          # blob position (0-100)
+                0.0                # blob_size (0-100)
+            ], dtype=np.float32),
+            high=np.array([
+                100.0, 100.0,    # agent position
+                100.0, 100.0,    # target position
+                1.0,               # blob_visible
+                100.0, 100.0,      # blob position
+                100.0              # blob_size
+            ], dtype=np.float32),
             dtype=np.float32
         )
         
-        # Define action space - 4 discrete actions for movement
+        # Moving up, down, left right
         self.action_space = gym.spaces.Discrete(4)
-        
-        # Initialize positions
         self.reset()
+
+    def _get_blob_info(self):
+        """Get information about the blob (cylinder)"""
+        try:
+            blob = self.robobo.readColorBlob(BlobColor.RED)
+            agent_x, agent_z = self._get_agent_position()
+            target_x, target_z = self._get_object_position()
+
+            if blob is None or blob.size <= 0:
+                # Cant see the blob
+                return {
+                    "visible": 0.0,
+                    "x": 50.0,      # Center
+                    "y": 50.0,      # Center
+                    "size": 0.0
+                }
+            elif (agent_x - target_x) < 150 and (agent_z - target_z) < 150:
+                # We are at the target
+                return {
+                        "visible": 1.0,
+                        "x": 50.0,
+                        "y": 50.0,
+                        "size": 400 # Max value
+                }
+            else:
+                # Blob detected
+                return {
+                    "visible": 1.0,
+                    "x": float(blob.posx),      # 0-100
+                    "y": float(blob.posy),      # 0-100
+                    "size": float(blob.size)    # 0-100
+                }
+        except Exception as e:
+            print(f"Error reading blob: {e}")
+            return {
+                "visible": 0.0,
+                "x": 50.0,
+                "y": 50.0,
+                "size": 0.0
+            }
+
 
     def _get_agent_position(self):
         """Get current robot position"""
@@ -80,45 +135,153 @@ class CylinderEnv(gym.Env):
             return 0.0, 0.0
 
     def _get_obs(self):
-        """Convert internal state to observation format"""
+        """Convert internal state to observation format with camera data"""
         agent_x, agent_z = self._get_agent_position()
         target_x, target_z = self._get_object_position()
+        blob_info = self._get_blob_info()
         
-        return np.array([agent_x, agent_z, target_x, target_z], dtype=np.float32)
+        return np.array([
+            agent_x, agent_z,           
+            target_x, target_z,          
+            blob_info["visible"],       
+            blob_info["x"],             
+            blob_info["y"],             
+            blob_info["size"]            
+        ], dtype=np.float32)
 
     def _get_info(self):
         """Compute auxiliary information for debugging"""
         agent_x, agent_z = self._get_agent_position()
         target_x, target_z = self._get_object_position()
-
-        # Calculate Euclidean distance to target, instead of Manhattan distance
+        blob_info = self._get_blob_info()
+        
+        # We use euclidean distance to calculate the distance
         distance = np.sqrt((agent_x - target_x)**2 + (agent_z - target_z)**2)
         
         return {
             "distance": distance,
             "agent_position": (agent_x, agent_z),
             "target_position": (target_x, target_z),
-            "step": self.current_step
+            "step": self.current_step,
+            "blob_visible": blob_info["visible"],
+            "blob_centered": self._is_blob_centered(blob_info),
+            "blob_size": blob_info["size"]
         }
+
+    def _is_blob_centered(self, blob_info, margin=15):
+        """Check if blob is centered in camera view"""
+        if blob_info["visible"] == 0.0:
+            return False
+        
+        center_x = 50.0
+        # Use absolute value to check left and right
+        return abs(blob_info["x"] - center_x) < margin
+    
+   
+    
+    def _move_target(self):
+        """Move the target object"""
+        try:
+            target_location = self.sim.getObjectLocation(self._object_id)
+
+            target_x = float(target_location["position"]["x"])  # Fuerza float
+            target_y = float(target_location["position"]["y"])
+            target_z = float(target_location["position"]["z"])
+            
+            # Movimiento: -100 en x y z (puedes randomizar después)
+            new_x = target_x - 40.0
+            new_z = target_z - 40.0
+            
+            # Clipping con float output
+            new_x = float(np.clip(new_x, -1000.0, 1000.0))
+            new_z = float(np.clip(new_z, -1000.0, 1000.0))
+            
+            new_position = {
+                "x": new_x,
+                "y": target_y,
+                "z": new_z
+            }
+            new_rotation = target_location.get("rotation", {"x": 0.0, "y": 0.0, "z": 0.0})
+            # Mover
+            self.sim.setObjectLocation(self._object_id, new_position, new_rotation)
+            self.sim.wait(0.5)  # Wait más largo para sync (ajusta si es lento)
+            
+        except Exception as e:
+            print(f"Error moviendo target: {e}")
+
+    def _calculate_reward(self, current_distance):
+        """Calculate reward based on distance and camera observations"""
+        blob_info = self._get_blob_info()
+        
+        # Distance reward
+        distance_improvement = self.previous_distance - current_distance
+        distance_reward = distance_improvement * 0.1
+        
+        # Vision reward
+        vision_reward = 0.0
+        if blob_info["visible"] == 1:
+            vision_reward += 0.2
+            
+            # Reward for how centered is the blob
+            center_x = 50.0
+            blob_x = blob_info["x"]
+            distance_from_center = abs(blob_x - center_x)
+            
+            # Limit the distance reward to avoid hight values
+            centering_reward = 0.3 * (1.0 - distance_from_center / 2.0)
+            vision_reward += centering_reward
+            
+            # Reward for how close is the blob
+            size_reward = blob_info["size"] * 0.01
+            vision_reward += size_reward
+        else:
+            # Penalize losing the blob
+            vision_reward = -0.3
+        
+        # Reward for reaching the target
+        goal_reward = 0.0
+        if current_distance < 150:
+            goal_reward = 0.0
+        
+        # Penalize leaving the target
+        distance_penalty = 0.0
+        if current_distance > self.previous_distance:
+            distance_penalty = -0.2
+        
+        total_reward = (
+            distance_reward + 
+            vision_reward + 
+            goal_reward + 
+            distance_penalty
+        )
+        
+        print(f"Rewards -> Distance: {distance_reward:.2f}, Vision: {vision_reward:.2f}, "
+              f"Goal: {goal_reward:.2f}, Penalty: {distance_penalty:.2f}, "
+              f"TOTAL: {total_reward:.2f}")
+        
+        return total_reward
 
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
         """Start a new episode"""
         super().reset(seed=seed)
         
-        # Reset simulation
         self.sim.resetSimulation()
-        time.sleep(1) 
+        time.sleep(1)
         
-        # Reset step counter
+        self.robobo.resetColorBlobs()
+        
         self.current_step = 0
-        
-        # Get initial distance for reward calculation
         self.initial_distance = self._get_info()["distance"]
         self.previous_distance = self.initial_distance
 
         observation = self._get_obs()
         info = self._get_info()
         
+        self.robobo.movePanTo(0, 50)
+        self.robobo.moveTiltTo(105, 50)
+        time.sleep(0.5)
+        
+
         return observation, info
 
     def step(self, action):
@@ -127,82 +290,52 @@ class CylinderEnv(gym.Env):
 
         print(f"\nStep {self.current_step}/{self.max_steps}")
 
-        # TODO: discretizar acciones
-        match action:
-            case 0:
-                print("Action: Move forward")
-            case 1:
-                print("Action: Turn left")
-            case 2:
-                print("Action: Turn right")
-            case 3:
-                print("Action: Move backward")
+        if self.current_step % 5 == 0:
+            print("Moving Target")
+            self._move_target()
+            # Actualizar la distancia previa después de mover el objetivo
+            self.previous_distance = self._get_info()["distance"]
+
 
         try:
             if action == 0:  # Move forward
-                self.robobo.moveWheelsByTime(20, 20, 0.5)
+                print("Action: Move forward")
+                self.robobo.moveWheelsByTime(20, 20, 0.25)
             elif action == 1:  # Turn left
-                self.robobo.moveWheelsByTime(20, -20, 0.5)
+                print("Action: Turn left")
+                self.robobo.moveWheelsByTime(20, -20, 0.25)
             elif action == 2:  # Turn right
-                self.robobo.moveWheelsByTime(-20, 20, 0.5)
+                print("Action: Turn right")
+                self.robobo.moveWheelsByTime(-20, 20, 0.25)
             elif action == 3:  # Move backward
-                self.robobo.moveWheelsByTime(-20, -20, 0.5)
+                print("Action: Move backward")
+                self.robobo.moveWheelsByTime(-20, -20, 0.25)
 
             time.sleep(0.6)
             
         except Exception as e:
             print(f"Error executing action: {e}")
-
+        
         # Get new state
         observation = self._get_obs()
         info = self._get_info()
         current_distance = info["distance"]
-        print(f"Robot position: {info['agent_position']}, Target position: {info['target_position']}, Distance: {current_distance:.3f}")
+        
+        print(f"Robot: {info['agent_position']}, Target: {info['target_position']}, "
+              f"Distance: {current_distance:.1f}, Blob visible: {info['blob_visible']}, "
+              f"Blob size: {info['blob_size']:.1f}")
         
         # Calculate reward
         reward = self._calculate_reward(current_distance)
-        print(f"---> Reward: {reward:.3f}")
-
-        # Check termination conditions
-        terminated = current_distance < 150  # Reached target
-        truncated = self.current_step >= self.max_steps  # Max steps reached
         
-        # Update previous distance for next step
+        # Check termination
+        terminated = current_distance < 150
+        truncated = self.current_step >= self.max_steps
+        
         self.previous_distance = current_distance
         
         return observation, reward, terminated, truncated, info
-    
-    def _calculate_reward(self, current_distance):
-        """Calculate normalized reward based on distance to target"""
-        '''
-        # Normalize distance change to [-1, 1] range
-        max_distance = self.initial_distance if self.initial_distance > 0 else 1.0
-        distance_delta = self.previous_distance - current_distance
-        normalized_delta = distance_delta / max_distance
 
-        # Reward for getting closer
-        distance_reward = normalized_delta
-        '''
-
-        distance_reward = (self.initial_distance - current_distance) * 10
-
-        # Large positive reward for reaching target (normalized)
-        if current_distance < 10:
-            return 1.0
-        
-        # Penalty for moving away from target
-        if current_distance > self.previous_distance:
-            distance_penalty = -0.5
-        else:
-            distance_penalty = 0.0
-
-        # step_penalty = -0.01
-        total_reward = distance_reward + distance_penalty # + step_penalty
-
-
-        print(f"Reward: {total_reward:.3f}")
-        return total_reward
-    
     def close(self):
         """Clean up resources when the environment is closed"""
         try:

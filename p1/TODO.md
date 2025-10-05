@@ -5,7 +5,7 @@
 - 2 opciones para las opciones consecutivas:
     - Cortar la ejecucion
     - Dejar la ejecucion
-
+- [ ] En la vision queda arreglar que cuando se acerque el valor quede bajo (esta mas o menos implementado pero hay que arreglarlo)
 
 
 

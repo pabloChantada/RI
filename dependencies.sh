@@ -2,7 +2,7 @@
 
 ENV_DIR="rob_env"
 
-if ! command -v python3.11 &> /dev/null; then
+if ! command -v python3.13 &> /dev/null; then
   echo "Error: Python 3.11 no está instalado. Instálalo con 'brew install python@3.11' en macOS."
   exit 1
 fi
@@ -12,8 +12,8 @@ if [ -d "$ENV_DIR" ]; then
   exit 0
 fi
 
-echo "Creating Python 3.11 environment: $ENV_DIR"
-python3.11 -m venv "$ENV_DIR"
+echo "Creating Python 3 environment: $ENV_DIR"
+python3.13 -m venv "$ENV_DIR"
 
 source "$ENV_DIR/bin/activate"
 
@@ -21,7 +21,7 @@ echo "Installing dependencies for $ENV_DIR"
 pip install --upgrade pip
 
 # Librerías del simulador y RL
-pip install robobopy robobosim gymnasium "stable-baselines3[extra]" pygame
+pip install robobopy robobosim gymnasium stable-baselines3[extra] pygame
 
 # Para gráficas y análisis de resultados
 pip install matplotlib seaborn pandas tensorboard
