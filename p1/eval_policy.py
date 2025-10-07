@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from stable_baselines3 import PPO
+from stable_baselines3 import SAC
 from cylinder_env import CylinderEnv
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -53,16 +53,10 @@ def plot_trajectories(traj_agent, traj_target, half, out_name):
     print(f"Gráfica guardada: {out_path}")
 
 if __name__ == "__main__":
-    model_path = os.path.join(MODELS_DIR, "ppo_cylinder.zip")
 
-    # ===== Evaluación Objetivo 1: cilindro estático =====
-    env_static = CylinderEnv(move_target=False)
-    model = PPO.load(model_path, env=env_static, device="auto")
-    traj_agent, traj_target = run_evaluation(env_static, model)
-    plot_trajectories(traj_agent, traj_target, env_static.half, "trayectorias_2D_static.png")
+    env = CylinderEnv()
+    model = SAC.load(os.path.join(MODELS_DIR, "ppo_cylinder.zip"), env=env, device="cpu")
 
-    # ===== Evaluación Objetivo 2: cilindro en movimiento =====
-    env_moving = CylinderEnv(move_target=True)
-    model.set_env(env_moving)  # reutilizamos el mismo modelo con otro entorno compatible
-    traj_agent_m, traj_target_m = run_evaluation(env_moving, model)
-    plot_trajectories(traj_agent_m, traj_target_m, env_moving.half, "trayectorias_2D_moving.png")
+    traj_agent, traj_target = run_evaluation(env, model)
+    plot_trajectories(traj_agent, traj_target)
+
