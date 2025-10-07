@@ -11,8 +11,8 @@ from stable_baselines3.common.evaluation import evaluate_policy
 
 from cylinder_env import CylinderEnv
 
-TRAIN_STEPS = 100 
-EPISODES = 3
+TRAIN_STEPS = 100
+EPISODES = 1
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(BASE_DIR, "models")
@@ -76,19 +76,22 @@ if __name__ == "__main__":
     
     env = DummyVecEnv([make_env])
 
-    model = PPO(
-        policy="MlpPolicy",
+    from stable_baselines3 import SAC
+
+    model = SAC(
+        policy="MlpPolicy",  # Política basada en una red neuronal de múltiples capas
         env=env,
-        n_steps=TRAIN_STEPS,
-        batch_size=128,
-        gamma=0.99,
-        learning_rate=3e-4,
-        gae_lambda=0.95,
-        clip_range=0.2,
-        ent_coef=0.0,
-        vf_coef=0.5,
+        gamma=0.99,          # Factor de descuento
+        learning_rate=3e-4,  # Tasa de aprendizaje
+        batch_size=256,      # Tamaño del lote para mayor estabilidad
+        ent_coef="auto",     # Auto-tune de coeficiente de entropía
+        tau=0.005,           # Tasa de actualización del objetivo
+        target_update_interval=1,
+        train_freq=64,       # Frecuencia de entrenamiento
+        gradient_steps=64,   # Pasos de gradiente por actualización
         verbose=1,
     )
+
 
     eval_callback = EvalCallback(
         env,
