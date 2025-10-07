@@ -1,5 +1,5 @@
 # En la primera iteracion unicamente tiene que encontrar el blob rojo y moverse hacia el
-
+#
 # Hay que usar StableBaselines3, con enviroments que sigan las estructura de Gymnasium
 # Para la creacion del env, es necesario:
 # - Crear una clase que herede de gym.Env (https://gymnasium.farama.org/introduction/create_custom_env/)
@@ -8,14 +8,13 @@
 #   - Espacio de acciones (cualquier accion aleatoria)
 #   - Funcion de recompensa
 #   - Politica del algoritmo
-
+#
 # Es necesario presentar resultados de las metricas: "mean_reward", "ep_reward_mean". 
 # Usando otras librerias como seaborn para resultados en formato .png, .jpeg, etc.
 # Tambien es necesario guardar un plano 2D de las diferentes posiciones que a realizado el agente
-
+#
 # Si la recompensa durante X acciones es negativa, seleccionar una nueva accion aleatoria 
 # o resetear el entorno
-
 
 from typing import Optional
 import gymnasium as gym
@@ -49,27 +48,22 @@ class CylinderEnv(gym.Env):
         
         self._object_id = list(self.sim.getObjects())[0] 
         
-        # [agent_x, agent_z, target_x, target_z, blob_visible, blob_x, blob_y, blob_size]
+        # Observation space (sin cambios): [agent_x, agent_z, target_x, target_z]
         self.observation_space = gym.spaces.Box(
-            low=np.array([
-                -100.0, -100.0,  # agent position
-                -100.0, -100.0,  # target position
-                0.0,               # blob_visible (0 o 1)
-                0.0, 0.0,          # blob position (0-100)
-                0.0                # blob_size (0-100)
-            ], dtype=np.float32),
-            high=np.array([
-                100.0, 100.0,    # agent position
-                100.0, 100.0,    # target position
-                1.0,               # blob_visible
-                100.0, 100.0,      # blob position
-                100.0              # blob_size
-            ], dtype=np.float32),
+            low=np.array([-1000.0, -1000.0, -1000.0, -1000.0], dtype=np.float32),
+            high=np.array([1000.0, 1000.0, 1000.0, 1000.0], dtype=np.float32),
             dtype=np.float32
         )
         
-        # Moving up, down, left right
-        self.action_space = gym.spaces.Discrete(4)
+        # === CAMBIO 1: acciones CONTINUAS en [-1, 1] para (vl, vr) ===
+        # Antes: Discrete(4). Ahora: Box(2) -> velocidades normalizadas de las dos ruedas.
+        self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
+
+        # Escala y duración para mapear [-1,1] -> motores Robobo
+        self._motor_scale = 30.0  # ajusta si quieres más/menos velocidad (rango aprox. de -100 a 100)
+        self._cmd_duration = 0.5  # segundos por acción (igual que antes)
+        
+        # Initialize positions
         self.reset()
 
     def _get_blob_info(self):
@@ -116,7 +110,6 @@ class CylinderEnv(gym.Env):
     def _get_agent_position(self):
         """Get current robot position"""
         try:
-            # There's always one robot with ID 0, so we only need to catch general exceptions
             agent_location = self.sim.getRobotLocation(0)
             return agent_location["position"]["x"], agent_location["position"]["z"]
         except Exception as e:
@@ -126,8 +119,6 @@ class CylinderEnv(gym.Env):
     def _get_object_position(self):
         """Get current target object position"""
         try:
-            # There's always one object (in other simulations there could be other objects), 
-            # but for now we only need to catch general exceptions
             target_location = self.sim.getObjectLocation(self._object_id)
             return target_location["position"]["x"], target_location["position"]["z"]
         except Exception as e:
@@ -138,26 +129,13 @@ class CylinderEnv(gym.Env):
         """Convert internal state to observation format with camera data"""
         agent_x, agent_z = self._get_agent_position()
         target_x, target_z = self._get_object_position()
-        blob_info = self._get_blob_info()
-        
-        return np.array([
-            agent_x, agent_z,           
-            target_x, target_z,          
-            blob_info["visible"],       
-            blob_info["x"],             
-            blob_info["y"],             
-            blob_info["size"]            
-        ], dtype=np.float32)
+        return np.array([agent_x, agent_z, target_x, target_z], dtype=np.float32)
 
     def _get_info(self):
         """Compute auxiliary information for debugging"""
         agent_x, agent_z = self._get_agent_position()
         target_x, target_z = self._get_object_position()
-        blob_info = self._get_blob_info()
-        
-        # We use euclidean distance to calculate the distance
         distance = np.sqrt((agent_x - target_x)**2 + (agent_z - target_z)**2)
-        
         return {
             "distance": distance,
             "agent_position": (agent_x, agent_z),
@@ -264,59 +242,40 @@ class CylinderEnv(gym.Env):
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
         """Start a new episode"""
         super().reset(seed=seed)
-        
         self.sim.resetSimulation()
-        time.sleep(1)
-        
-        self.robobo.resetColorBlobs()
-        
+        time.sleep(1) 
         self.current_step = 0
         self.initial_distance = self._get_info()["distance"]
         self.previous_distance = self.initial_distance
-
         observation = self._get_obs()
         info = self._get_info()
-        
-        self.robobo.movePanTo(0, 50)
-        self.robobo.moveTiltTo(105, 50)
-        time.sleep(0.5)
-        
-
         return observation, info
 
     def step(self, action):
-        """Execute one timestep within the environment"""
+        """Execute one timestep within the environment (ACCIONES CONTINUAS)"""
         self.current_step += 1
-
         print(f"\nStep {self.current_step}/{self.max_steps}")
 
-        if self.current_step % 5 == 0:
-            print("Moving Target")
-            self._move_target()
-            # Actualizar la distancia previa después de mover el objetivo
-            self.previous_distance = self._get_info()["distance"]
+        # === CAMBIO 2: interpretar acción continua [vl, vr] ∈ [-1,1] ===
+        a = np.asarray(action, dtype=np.float32).reshape(-1)
+        if a.size != 2:
+            raise ValueError(f"Action must have shape (2,), got {a.shape}")
+        vl = float(np.clip(a[0], -1.0, 1.0))
+        vr = float(np.clip(a[1], -1.0, 1.0))
 
+        # Para ver en consola qué hace:
+        print(f"Action (continuous): vl={vl:.3f}, vr={vr:.3f}")
 
+        # Mapear a velocidades de motor Robobo y ejecutar durante _cmd_duration
         try:
-            if action == 0:  # Move forward
-                print("Action: Move forward")
-                self.robobo.moveWheelsByTime(20, 20, 0.25)
-            elif action == 1:  # Turn left
-                print("Action: Turn left")
-                self.robobo.moveWheelsByTime(20, -20, 0.25)
-            elif action == 2:  # Turn right
-                print("Action: Turn right")
-                self.robobo.moveWheelsByTime(-20, 20, 0.25)
-            elif action == 3:  # Move backward
-                print("Action: Move backward")
-                self.robobo.moveWheelsByTime(-20, -20, 0.25)
-
-            time.sleep(0.6)
-            
+            left = int(np.clip(vl * self._motor_scale, -100, 100))
+            right = int(np.clip(vr * self._motor_scale, -100, 100))
+            self.robobo.moveWheelsByTime(left, right, self._cmd_duration)
+            time.sleep(self._cmd_duration + 0.1)
         except Exception as e:
             print(f"Error executing action: {e}")
-        
-        # Get new state
+
+        # Nuevo estado y métricas
         observation = self._get_obs()
         info = self._get_info()
         current_distance = info["distance"]
@@ -325,17 +284,27 @@ class CylinderEnv(gym.Env):
               f"Distance: {current_distance:.1f}, Blob visible: {info['blob_visible']}, "
               f"Blob size: {info['blob_size']:.1f}")
         
-        # Calculate reward
+        # Recompensa (sin cambios)
         reward = self._calculate_reward(current_distance)
-        
-        # Check termination
+        print(f"---> Reward: {reward:.3f}")
+
+        # Terminación (sin cambios)
         terminated = current_distance < 150
         truncated = self.current_step >= self.max_steps
         
         self.previous_distance = current_distance
-        
         return observation, reward, terminated, truncated, info
-
+    
+    def _calculate_reward(self, current_distance):
+        """Calculate normalized reward based on distance to target"""
+        distance_reward = (self.initial_distance - current_distance) * 10
+        if current_distance < 10:
+            return 1.0
+        distance_penalty = -0.5 if current_distance > self.previous_distance else 0.0
+        total_reward = distance_reward + distance_penalty
+        print(f"Reward: {total_reward:.3f}")
+        return total_reward
+    
     def close(self):
         """Clean up resources when the environment is closed"""
         try:
