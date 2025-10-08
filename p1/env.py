@@ -27,14 +27,13 @@ import random
 
 class CustomEnv(gym.Env):
     """
-    Entorno personalizado para entrenar un robot Robobo a localizar
-    y acercarse a un cilindro rojo usando visión por computador.
-    
+    Entorno cuadrado de busqueda de un cilindro ROJO. Usando como
+    estructura base los entornos de Gymnasium
+
     Observation Space:
         - Posición del agente (x, z) normalizada: [-1, 1]
         - Posición del objetivo (x, z) normalizada: [-1, 1]
-        - Blob visible: {0, 1}
-        - Posición del blob (x, y) normalizada: [-1, 1]
+        - Blob visible: {0, 1} -> int
         - Tamaño del blob normalizado: [0, 1]
     
     Action Space:
@@ -44,7 +43,7 @@ class CustomEnv(gym.Env):
     def __init__(self, size: int = 1000, max_steps: int = 30):
         super().__init__()
 
-        self.size = size
+        self.size = size  # Indica como de "grande" se ve el blob en la camara
         self.max_steps = max_steps
         self.current_step = 0
         
@@ -52,7 +51,7 @@ class CustomEnv(gym.Env):
         self.goal_threshold = 150.0
         
         # Frecuencia de movimiento del target (cada N pasos)
-        self.target_move_frequency = 2 
+        self.target_move_frequency = 5 
 
         # Conectar al simulador Robobo
         self.robobo = Robobo("localhost")
@@ -100,18 +99,17 @@ class CustomEnv(gym.Env):
         )
         
         # Parámetros para conversión de acciones
-        self._motor_scale = 20.0      # Escala para convertir [-1,1] a velocidad del motor
-        self._cmd_duration = 0.25     # Duración del comando en segundos
-        
+        self.speed = 20.0      # Escala para convertir [-1,1] a velocidad del motor
+        self.wheels_time = 0.25  # Tiempo para realizar las acciones 
         # Variables para seguimiento
         self.previous_distance = None
         self.initial_distance = None
 
     def _setup_camera(self):
         """Configura la posición de la cámara del robot"""
-        self.robobo.movePanTo(0, 50)
-        self.robobo.moveTiltTo(105, 50)
-        time.sleep(0.5)
+        self.robobo.movePanTo(0, 50)  # Resetear el Pan por si acaso
+        self.robobo.moveTiltTo(105, 50)  # (Grados, Speed) -> (Max hacia abajo, _)
+        time.sleep(0.2)
 
     def _get_blob_info(self):
         """
@@ -122,9 +120,11 @@ class CustomEnv(gym.Env):
         """
         try:
             blob = self.robobo.readColorBlob(BlobColor.RED)
+            # Las rotaciones no son necesarias exceptuando cuando lo requieren las funciones
             agent_x, agent_z = self._get_agent_position()
             target_x, target_z = self._get_object_position()
             
+            # Usamos la euclidea de forma arbitraria realmente, aunque seria interesante usar la Manhattan )?
             distance_to_target = np.sqrt((agent_x - target_x)**2 + (agent_z - target_z)**2)
 
             # Caso 1: No se detecta blob
@@ -166,7 +166,7 @@ class CustomEnv(gym.Env):
     def _get_agent_position(self):
         """Obtiene la posición actual del robot"""
         try:
-            agent_location = self.sim.getRobotLocation(0)
+            agent_location = self.sim.getRobotLocation(0)  # Devuelve un trio (x,y,z); pero el eje y no se modifica nunca
             return agent_location["position"]["x"], agent_location["position"]["z"]
         except Exception as e:
             print(f"Error obteniendo posición del agente: {e}")
@@ -175,7 +175,7 @@ class CustomEnv(gym.Env):
     def _get_object_position(self):
         """Obtiene la posición actual del objeto objetivo"""
         try:
-            target_location = self.sim.getObjectLocation(self._object_id)
+            target_location = self.sim.getObjectLocation(self._object_id)  # Devuelve un trio (x,y,z); pero el eje y no se modifica nunca
             return target_location["position"]["x"], target_location["position"]["z"]
         except Exception as e:
             print(f"Error obteniendo posición del objeto: {e}")
@@ -198,7 +198,7 @@ class CustomEnv(gym.Env):
         target_x_norm = np.clip(target_x / 1000.0, -1.0, 1.0)
         target_z_norm = np.clip(target_z / 1000.0, -1.0, 1.0)
         
-        # Normalizar posición del blob: [0, 100] -> [-1, 1] (centrado en 50)
+        # Normalizar posición del blob respecto al centro de la camara: [0, 100] -> [-1, 1] (centrado en 50)
         blob_x_norm = np.clip((blob_info["x"] - 50.0) / 50.0, -1.0, 1.0)
         blob_y_norm = np.clip((blob_info["y"] - 50.0) / 50.0, -1.0, 1.0)
         
@@ -251,31 +251,6 @@ class CustomEnv(gym.Env):
         center_x = 50.0
         return abs(blob_info["x"] - center_x) < margin
     
-    def _randomize_target_position(self):
-        """
-        Coloca el objetivo en una posición aleatoria al inicio del episodio
-        """
-        try:
-            target_location = self.sim.getObjectLocation(self._object_id)
-            target_y = float(target_location["position"]["y"])
-            
-            # Generar posición aleatoria dentro del rango válido
-            new_x = float(random.uniform(-800.0, 800.0))
-            new_z = float(random.uniform(-800.0, 800.0))
-            
-            new_position = {
-                "x": new_x,
-                "y": target_y,
-                "z": new_z
-            }
-            new_rotation = target_location.get("rotation", {"x": 0.0, "y": 0.0, "z": 0.0})
-            
-            self.sim.setObjectLocation(self._object_id, new_position, new_rotation)
-            time.sleep(0.3)  # Esperar a que se actualice
-            
-        except Exception as e:
-            print(f"Error randomizando posición del objetivo: {e}")
-
     def _move_target(self):
         """
         Mueve el objetivo a una nueva posición cercana (para target móvil)
@@ -288,8 +263,8 @@ class CustomEnv(gym.Env):
             target_z = float(target_location["position"]["z"])
             
             # Movimiento aleatorio en x y z
-            new_x = target_x + random.choice([-40.0, 40.0])
-            new_z = target_z + random.choice([-40.0, 40.0])
+            new_x = target_x + random.choice([-20.0, 0.0])
+            new_z = target_z + random.choice([-20.0, 0.0])
             
             # Mantener dentro de los límites del entorno
             new_x = float(np.clip(new_x, -1000.0, 1000.0))
@@ -300,6 +275,8 @@ class CustomEnv(gym.Env):
                 "y": target_y,
                 "z": new_z
             }
+            # Aqui es necesario usar la altura y rotacion por peticiones de la funcion de Robobo
+            # Pero realmente no serian necesarias y podria acortarse la funcion
             new_rotation = target_location.get("rotation", {"x": 0.0, "y": 0.0, "z": 0.0})
             
             self.sim.setObjectLocation(self._object_id, new_position, new_rotation)
@@ -332,7 +309,9 @@ class CustomEnv(gym.Env):
         # 1. Recompensa por reducir distancia
         if self.previous_distance is not None:
             distance_improvement = self.previous_distance - current_distance
-            reward += distance_improvement * 0.01  # Escalar apropiadamente
+            # Usamos el 0.01 para evitar valores altos, de esta forma independientemente
+            # del valor de "distance_improvement"; obtendremos un valor bajo (normalmentee entre [-1,1]
+            reward += distance_improvement * 0.01  
         
         # 2. Recompensa por visibilidad del blob
         if blob_info["visible"] == 1.0:
@@ -374,10 +353,7 @@ class CustomEnv(gym.Env):
         
         # Resetear simulación
         self.sim.resetSimulation()
-        time.sleep(0.8)
-        
-        # Randomizar posición del objetivo
-        self._randomize_target_position()
+        time.sleep(0.5)
         
         # Resetear detección de blobs
         self.robobo.resetColorBlobs()
@@ -393,12 +369,12 @@ class CustomEnv(gym.Env):
         
         observation = self._get_obs()
         
-        print(f"\n{'='*60}")
-        print(f"NUEVO EPISODIO")
-        print(f"Posición inicial agente: {info['agent_position']}")
-        print(f"Posición objetivo: {info['target_position']}")
-        print(f"Distancia inicial: {self.initial_distance:.1f}")
-        print(f"{'='*60}\n")
+        # print(f"\n{'='*60}")
+        # print(f"NUEVO EPISODIO")
+        # print(f"Posición inicial agente: {info['agent_position']}")
+        # print(f"Posición objetivo: {info['target_position']}")
+        # print(f"Distancia inicial: {self.initial_distance:.1f}")
+        # print(f"{'='*60}\n")
         
         return observation, info
 
@@ -420,10 +396,9 @@ class CustomEnv(gym.Env):
 
         # Mover el target cada N pasos
         if self.current_step % self.target_move_frequency == 0:
-            print(f"\n  🎯 Moviendo target (step {self.current_step})...")
             self._move_target()
-            # IMPORTANTE: Actualizar la distancia previa después de mover el objetivo
-            # para que la recompensa no penalice injustamente al agente
+            # Actualizamos la distancia previa después de mover el objetivo
+            # para que la recompensa no penalice al agente
             info_temp = self._get_info()
             self.previous_distance = info_temp["distance"]
 
@@ -432,20 +407,24 @@ class CustomEnv(gym.Env):
         if action.size != 2:
             raise ValueError(f"La acción debe tener 2 elementos, se recibieron {action.size}")
         
+
+        # ESTO CREO QUE MEJOR LOS EXPLIQUE LAURA
+        # DE AQUI ->
         left_vel = float(np.clip(action[0], -1.0, 1.0))
         right_vel = float(np.clip(action[1], -1.0, 1.0))
 
         # Ejecutar acción en el simulador
         try:
-            left_motor = int(np.clip(left_vel * self._motor_scale, -100, 100))
-            right_motor = int(np.clip(right_vel * self._motor_scale, -100, 100))
+            left_motor = int(np.clip(left_vel * self.speed, -100, 100))
+            right_motor = int(np.clip(right_vel * self.speed, -100, 100))
             
-            self.robobo.moveWheelsByTime(left_motor, right_motor, self._cmd_duration)
-            time.sleep(0.5)  # Esperar a que se complete la acción
+            self.robobo.moveWheelsByTime(right_motor, left_motor, self.wheels_time)
+            time.sleep(0.25)  # Esperar a que se complete la acción
             
         except Exception as e:
             print(f"Error ejecutando acción: {e}")
-        
+        # <- HASTA AQUI
+
         # Obtener nuevo estado
         observation = self._get_obs()
         info = self._get_info()
@@ -456,14 +435,14 @@ class CustomEnv(gym.Env):
         reward = self._calculate_reward(current_distance, blob_info)
         
         # Verificar condiciones de terminación
-        terminated = current_distance < self.goal_threshold
-        truncated = self.current_step >= self.max_steps
+        terminated = current_distance < self.goal_threshold  # Fin de episodio por llegar a meta
+        truncated = self.current_step >= self.max_steps      # Fin de episodio por tiempo
         
         # Logging
         print(f"Step {self.current_step}/{self.max_steps} | "
               f"Acción: L={left_vel:.2f} R={right_vel:.2f} | "
               f"Dist: {current_distance:.1f} | "
-              f"Blob: {'✓' if blob_info['visible'] else '✗'} | "
+              f"Blob: {'1' if blob_info['visible'] else '0'} | "
               f"Reward: {reward:.2f}")
         
         # Actualizar distancia previa

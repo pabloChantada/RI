@@ -1,7 +1,9 @@
 # Chipichanti
 - Crear memoria
-- Arreglar graficas de metricas
-- Arreglar episodios
+- Cambiar los steps a un conf o .env para facilidad
+- Comprobar que en las graficas funcionen sin el tiempo
+- Pequeño bug en los ultimos episodios (Seguramente sea por falta de sleeps en el codigo
+y sobrecarga de mensajes)
 
 # Lau
 - Hyperparametros
