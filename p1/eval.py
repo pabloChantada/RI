@@ -178,7 +178,7 @@ if __name__ == "__main__":
     env = CustomEnv(size=1000, max_steps=30)
     
     # Cargar modelo
-    model_path = os.path.join(CKPT_DIR, "best_model.zip")
+    model_path = os.path.join(MODELS_DIR, "sac_cylinder_final.zip")
     if not os.path.exists(model_path):
         print(f"ERROR: No se encontró el modelo en {model_path}")
         print("Asegúrate de entrenar el modelo primero con train_ppo.py")
