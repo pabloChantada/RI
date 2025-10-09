@@ -1,20 +1,15 @@
-# En la primera iteracion unicamente tiene que encontrar el blob rojo y moverse hacia el
+"""
+Custom Gymnasium Environment for Red Cylinder Search Task
 
-# Hay que usar StableBaselines3, con enviroments que sigan las estructura de Gymnasium
-# Para la creacion del env, es necesario:
-# - Crear una clase que herede de gym.Env (https://gymnasium.farama.org/introduction/create_custom_env/)
-# - A esta clase hay que implementarle los metodos:
-#   - Espacio de observaciones/estados
-#   - Espacio de acciones (cualquier accion aleatoria)
-#   - Funcion de recompensa
-#   - Politica del algoritmo
+This environment simulates a robot (Robobo) searching for a red cylinder in a square arena.
+The robot uses camera blob detection to locate and approach the target.
 
-# Es necesario presentar resultados de las metricas: "mean_reward", "ep_reward_mean". 
-# Usando otras librerias como seaborn para resultados en formato .png, .jpeg, etc.
-# Tambien es necesario guardar un plano 2D de las diferentes posiciones que a realizado el agente
-
-# Si la recompensa durante X acciones es negativa, seleccionar una nueva accion aleatoria 
-# o resetear el entorno
+Environment Specifications:
+    - Arena size: 2000x2000 units ([-1000, 1000] in both X and Z axes)
+    - Observation space: 8-dimensional normalized vector
+    - Action space: Continuous wheel velocities [-1, 1] for each wheel
+    - Episode termination: Goal reached or max steps exceeded
+"""
 
 from typing import Optional
 import gymnasium as gym
@@ -25,72 +20,80 @@ import time
 from robobopy.utils.BlobColor import BlobColor
 import random
 
+
 class CustomEnv(gym.Env):
     """
-    Entorno cuadrado de busqueda de un cilindro ROJO. Usando como
-    estructura base los entornos de Gymnasium
+    Square environment for red cylinder search using Gymnasium structure.
 
-    Observation Space:
-        - Posición del agente (x, z) normalizada: [-1, 1]
-        - Posición del objetivo (x, z) normalizada: [-1, 1]
-        - Blob visible: {0, 1} -> int
-        - Tamaño del blob normalizado: [0, 1]
+    Observation Space (8 dimensions, all normalized):
+        - Agent position (x, z): [-1, 1]
+        - Target position (x, z): [-1, 1]
+        - Blob visible: {0, 1}
+        - Blob position (x, y): [-1, 1] (centered at camera center)
+        - Blob size: [0, 1]
     
-    Action Space:
-        - Velocidades continuas de las ruedas: [-1, 1] para cada rueda
+    Action Space (2 dimensions):
+        - Continuous wheel velocities: [-1, 1] for left and right wheels
     """
     
     def __init__(self, size: int = 1000, max_steps: int = 30):
+        """
+        Initialize the custom environment.
+        
+        Args:
+            size: Maximum camera blob size threshold
+            max_steps: Maximum steps per episode, defaults to 30
+        """
         super().__init__()
 
-        self.size = size  # Indica como de "grande" se ve el blob en la camara
+        self.size = size
         self.max_steps = max_steps
         self.current_step = 0
         
-        # Umbral para considerar que se alcanzó el objetivo
+        # Goal reached threshold 
         self.goal_threshold = 150.0
         
-        # Frecuencia de movimiento del target (cada N pasos)
+        # Target movement frequency (every N steps)
         self.target_move_frequency = 5 
 
-        # Conectar al simulador Robobo
+        # Connect to Robobo simulator
         self.robobo = Robobo("localhost")
         self.robobo.connect()
         self.sim = RoboboSim("localhost")
         self.sim.connect()
         
-        # Configurar detección de blobs (solo RED)
+        # Configure blob detection (RED only)
         self.robobo.setActiveBlobs(True, False, False, False)
         
-        # Ajustar posición de la cámara
+        # Setup camera position
         self._setup_camera()
         
-        # Obtener ID del objeto objetivo (cilindro)
+        # Get target object ID (cylinder)
         self._object_id = list(self.sim.getObjects())[0]
         
-        # OBSERVATION SPACE: Todos los valores normalizados
+        # OBSERVATION SPACE: All normalized values
         # [agent_x, agent_z, target_x, target_z, 
         #  blob_visible, blob_x, blob_y, blob_size]
         self.observation_space = gym.spaces.Box(
             low=np.array([
                 -1.0, -1.0,  # agent position
                 -1.0, -1.0,  # target position
-                0.0,         # blob_visible (0 o 1)
-                -1.0, -1.0,  # blob position (centrado en 0)
+                0.0,         # blob_visible (0 or 1)
+                -1.0, -1.0,  # blob position (centered at 0)
                 0.0          # blob_size
             ], dtype=np.float32),
             high=np.array([
                 1.0, 1.0,    # agent position
                 1.0, 1.0,    # target position
-                1.0,         # blob_visible
-                1.0, 1.0,    # blob position
+                1.0,         # blob_visible (0 or 1)
+                1.0, 1.0,    # blob position (centered at 0)
                 1.0          # blob_size
             ], dtype=np.float32),
             dtype=np.float32
         )
         
-        # ACTION SPACE: Velocidades continuas de las ruedas
-        # [left_wheel_velocity, right_wheel_velocity] en [-1, 1]
+        # ACTION SPACE: Continuous wheel velocities
+        # [left_wheel_velocity, right_wheel_velocity] in [-1, 1]
         self.action_space = gym.spaces.Box(
             low=-1.0, 
             high=1.0, 
@@ -98,64 +101,63 @@ class CustomEnv(gym.Env):
             dtype=np.float32
         )
         
-        # Parámetros para conversión de acciones
-        self.speed = 20.0      # Escala para convertir [-1,1] a velocidad del motor
-        self.wheels_time = 0.25  # Tiempo para realizar las acciones 
-        # Variables para seguimiento
+        # Action conversion parameters
+        self.speed = 20.0        # Scale to convert [-1,1] to motor speed
+        self.wheels_time = 0.25  # Time duration for wheel actions
+        
+        # Tracking variables
         self.previous_distance = None
         self.initial_distance = None
 
     def _setup_camera(self):
-        """Configura la posición de la cámara del robot"""
-        self.robobo.movePanTo(0, 50)  # Resetear el Pan por si acaso
-        self.robobo.moveTiltTo(105, 50)  # (Grados, Speed) -> (Max hacia abajo, _)
+        """Configure robot camera position (tilt down to see floor)."""
+        self.robobo.movePanTo(0, 50)      # Reset pan
+        self.robobo.moveTiltTo(105, 50)   # Tilt to max downward position
         time.sleep(0.2)
 
     def _get_blob_info(self):
         """
-        Obtiene información del blob (cilindro) detectado por la cámara
+        Get information about detected blob from camera.
         
         Returns:
-            dict: Información del blob con claves 'visible', 'x', 'y', 'size'
+            dict: Blob information with keys 'visible', 'x', 'y', 'size'
         """
         try:
             blob = self.robobo.readColorBlob(BlobColor.RED)
-            # Las rotaciones no son necesarias exceptuando cuando lo requieren las funciones
             agent_x, agent_z = self._get_agent_position()
             target_x, target_z = self._get_object_position()
             
-            # Usamos la euclidea de forma arbitraria realmente, aunque seria interesante usar la Manhattan )?
             distance_to_target = np.sqrt((agent_x - target_x)**2 + (agent_z - target_z)**2)
 
-            # Caso 1: No se detecta blob
+            # Case 1: No blob detected
             if blob is None or blob.size <= 0:
                 return {
                     "visible": 0.0,
-                    "x": 50.0,      # Centro de la imagen
-                    "y": 50.0,      # Centro de la imagen
+                    "x": 50.0,      # Image center
+                    "y": 50.0,
                     "size": 0.0
                 }
             
-            # Caso 2: Estamos muy cerca del objetivo (alcanzado)
+            # Case 2: Very close to target (goal reached)
             elif distance_to_target < self.goal_threshold:
                 return {
                     "visible": 1.0,
-                    "x": 50.0,      # Centro (objetivo centrado)
-                    "y": 50.0,      # Centro
-                    "size": 400.0   # Tamaño máximo
+                    "x": 50.0,      # Centered
+                    "y": 50.0,
+                    "size": 400.0   # Maximum size
                 }
             
-            # Caso 3: Blob detectado normalmente
+            # Case 3: Blob detected normally
             else:
                 return {
                     "visible": 1.0,
-                    "x": float(blob.posx),      # Rango [0-100]
-                    "y": float(blob.posy),      # Rango [0-100]
-                    "size": float(blob.size)    # Rango [0-100+]
+                    "x": float(blob.posx),      # Range [0-100]
+                    "y": float(blob.posy),      # Range [0-100]
+                    "size": float(blob.size)    # Range [0-100+]
                 }
                 
         except Exception as e:
-            print(f"Error leyendo blob: {e}")
+            print(f"Error reading blob: {e}")
             return {
                 "visible": 0.0,
                 "x": 50.0,
@@ -164,45 +166,57 @@ class CustomEnv(gym.Env):
             }
 
     def _get_agent_position(self):
-        """Obtiene la posición actual del robot"""
+        """
+        Get current robot position.
+        
+        Returns:
+            tuple: (x, z) coordinates
+        """
         try:
-            agent_location = self.sim.getRobotLocation(0)  # Devuelve un trio (x,y,z); pero el eje y no se modifica nunca
+            agent_location = self.sim.getRobotLocation(0)
+            # We dont need to track rotation and "y" axis in this case
             return agent_location["position"]["x"], agent_location["position"]["z"]
         except Exception as e:
-            print(f"Error obteniendo posición del agente: {e}")
+            print(f"Error getting agent position: {e}")
             return 0.0, 0.0
 
     def _get_object_position(self):
-        """Obtiene la posición actual del objeto objetivo"""
+        """
+        Get current target object position.
+        
+        Returns:
+            tuple: (x, z) coordinates
+        """
         try:
-            target_location = self.sim.getObjectLocation(self._object_id)  # Devuelve un trio (x,y,z); pero el eje y no se modifica nunca
+            target_location = self.sim.getObjectLocation(self._object_id)
+            # We dont need to track rotation and "y" axis in this case
             return target_location["position"]["x"], target_location["position"]["z"]
         except Exception as e:
-            print(f"Error obteniendo posición del objeto: {e}")
+            print(f"Error getting object position: {e}")
             return 0.0, 0.0
 
     def _get_obs(self):
         """
-        Genera la observación actual del entorno (NORMALIZADA)
+        Generate current normalized observation.
         
         Returns:
-            np.ndarray: Vector de observación normalizado
+            np.ndarray: Normalized observation vector (8 dimensions)
         """
         agent_x, agent_z = self._get_agent_position()
         target_x, target_z = self._get_object_position()
         blob_info = self._get_blob_info()
         
-        # Normalizar posiciones: [-1000, 1000] -> [-1, 1]
+        # Normalize positions: [-1000, 1000] -> [-1, 1]
         agent_x_norm = np.clip(agent_x / 1000.0, -1.0, 1.0)
         agent_z_norm = np.clip(agent_z / 1000.0, -1.0, 1.0)
         target_x_norm = np.clip(target_x / 1000.0, -1.0, 1.0)
         target_z_norm = np.clip(target_z / 1000.0, -1.0, 1.0)
         
-        # Normalizar posición del blob respecto al centro de la camara: [0, 100] -> [-1, 1] (centrado en 50)
+        # Normalize blob position centered at camera center: [0, 100] -> [-1, 1]
         blob_x_norm = np.clip((blob_info["x"] - 50.0) / 50.0, -1.0, 1.0)
         blob_y_norm = np.clip((blob_info["y"] - 50.0) / 50.0, -1.0, 1.0)
         
-        # Normalizar tamaño del blob: [0, 400] -> [0, 1]
+        # Normalize blob size: [0, 400] -> [0, 1]
         blob_size_norm = np.clip(blob_info["size"] / 400.0, 0.0, 1.0)
         
         return np.array([
@@ -216,15 +230,16 @@ class CustomEnv(gym.Env):
 
     def _get_info(self):
         """
-        Genera información auxiliar para debugging
+        Generate auxiliary debugging information.
         
         Returns:
-            dict: Información del estado actual
+            dict: Current state information
         """
         agent_x, agent_z = self._get_agent_position()
         target_x, target_z = self._get_object_position()
         blob_info = self._get_blob_info()
         
+        # Euclidean distance
         distance = np.sqrt((agent_x - target_x)**2 + (agent_z - target_z)**2)
         
         return {
@@ -239,11 +254,14 @@ class CustomEnv(gym.Env):
 
     def _is_blob_centered(self, blob_info, margin=15):
         """
-        Verifica si el blob está centrado en la vista de la cámara
+        Check if blob is centered in camera view.
         
         Args:
-            blob_info: Información del blob
-            margin: Margen de tolerancia en pixeles
+            blob_info: Blob information dictionary
+            margin: Tolerance margin in pixels
+            
+        Returns:
+            bool: True if blob is centered within margin
         """
         if blob_info["visible"] == 0.0:
             return False
@@ -253,9 +271,10 @@ class CustomEnv(gym.Env):
     
     def _move_target(self):
         """
-        Mueve el objetivo en una trayectoria CURVA (como en tu dibujo)
-        El cilindro se mueve hacia adelante/atrás (Z) Y hacia los lados (X) simultáneamente
-        creando una curva suave hacia la izquierda o derecha
+        Move target in a curved trajectory.
+        
+        The cylinder moves in both X (lateral) and Z (forward/backward) directions
+        simultaneously. Direction changes occur when arena boundaries are reached.
         """
         try:
             target_location = self.sim.getObjectLocation(self._object_id)
@@ -264,62 +283,55 @@ class CustomEnv(gym.Env):
             target_y = float(target_location["position"]["y"])
             target_z = float(target_location["position"]["z"])
             
-            # INICIALIZACIÓN DE MOVIMIENTO CURVO
-            
+            # Initialize curved movement parameters
             if not hasattr(self, 'target_direction'):
-                # Elegir dirección de la curva: -1 (curva izquierda) o +1 (curva derecha)
+                # Choose curve direction: -1 (left curve) or +1 (right curve)
                 self.target_direction = random.choice([-1, 1])
-                self.target_speed_x = random.uniform(4.0, 6.0)  # Velocidad lateral
-                self.target_speed_z = random.uniform(3.0, 5.0)  # Velocidad hacia adelante/atrás
                 
-                # Elegir si va hacia el robot (negativo) o se aleja (positivo)
-                self.z_direction = random.choice([-1, 1])
-                
-                direction_name = "DERECHA" if self.target_direction > 0 else "IZQUIERDA"
-                z_direction_name = "HACIA ROBOT" if self.z_direction < 0 else "ALEJÁNDOSE"
-                print(f"\n  [Cilindro inicializado - Curva hacia {direction_name}, {z_direction_name}]")
-                print(f"      Velocidad X: {self.target_speed_x:.1f}, Velocidad Z: {self.target_speed_z:.1f}")
-            
-            # MOVIMIENTO CURVO SIMULTÁNEO EN X y Z
-            
-            move_x = self.target_direction * self.target_speed_x  # Movimiento lateral
-            move_z = self.z_direction * self.target_speed_z        # Movimiento adelante/atrás
-            
-            # Calcular nueva posición
+                # Always move backwards (negative Z)
+                self.z_direction = -1
+
+                # Set movement speeds
+                self.target_speed_x = random.uniform(4.0, 6.0)  # Lateral speed
+                self.target_speed_z = random.uniform(3.0, 5.0)  # Forward/backward speed
+
+                direction_name = "RIGHT" if self.target_direction > 0 else "LEFT"
+                print(f"\n  [Target initialized - Curved backward and to {direction_name}]")
+                print(f"      Speed X: {self.target_speed_x:.1f}, Speed Z: {self.target_speed_z:.1f}")
+
+            # Calculate simultaneous curved movement
+            move_x = self.target_direction * self.target_speed_x  # Lateral
+            move_z = -abs(self.target_speed_z)                    # Always backward (negative)
+
+            # Calculate new position
             new_x = target_x + move_x
             new_z = target_z + move_z
             
-            # DETECCIÓN DE BORDES Y CAMBIO DE DIRECCIÓN
+            # Boundary detection and direction change
+            MARGIN_X = 150.0  # Lateral margin
+            MARGIN_Z = 150.0  # Front/back margin
             
-            MARGIN_X = 150.0  # Margen lateral
-            MARGIN_Z = 150.0  # Margen frontal/trasero
-            changed_direction = False
-            
-            # Rebote en bordes laterales (X)
+            # Bounce on lateral boundaries (X)
             if new_x <= -1000.0 + MARGIN_X:
                 new_x = -1000.0 + MARGIN_X
-                self.target_direction = 1  # Ahora curva hacia la derecha
-                changed_direction = True
-                print(f"\n  [🔄 Rebote LATERAL IZQUIERDO - Ahora curva hacia DERECHA]")
+                self.target_direction = 1  # Now curve right
+                print(f"\n  [LEFT LATERAL bounce - Now curves RIGHT]")
             elif new_x >= 1000.0 - MARGIN_X:
                 new_x = 1000.0 - MARGIN_X
-                self.target_direction = -1  # Ahora curva hacia la izquierda
-                changed_direction = True
-                print(f"\n  [🔄 Rebote LATERAL DERECHO - Ahora curva hacia IZQUIERDA]")
+                self.target_direction = -1  # Now curve left
+                print(f"\n  [RIGHT LATERAL bounce - Now curves LEFT]")
             
-            # Rebote en bordes frontales/traseros (Z)
+            # Bounce on front/back boundaries (Z)
             if new_z <= -1000.0 + MARGIN_Z:
                 new_z = -1000.0 + MARGIN_Z
-                self.z_direction = 1  # Ahora se aleja del robot
-                changed_direction = True
-                print(f"\n  [🔄 Rebote FRONTAL - Ahora se ALEJA]")
+                self.z_direction = 1  # Now moves away
+                print(f"\n  [FRONT bounce - Now moves AWAY]")
             elif new_z >= 1000.0 - MARGIN_Z:
                 new_z = 1000.0 - MARGIN_Z
-                self.z_direction = -1  # Ahora va hacia el robot
-                changed_direction = True
-                print(f"\n  [🔄 Rebote TRASERO - Ahora va HACIA ROBOT]")
+                self.z_direction = -1  # Now moves toward robot
+                print(f"\n  [BACK bounce - Now moves TOWARD ROBOT]")
             
-            # Asegurar que los valores estén en rango
+            # Ensure values are within range
             new_x = float(np.clip(new_x, -1000.0, 1000.0))
             new_z = float(np.clip(new_z, -1000.0, 1000.0))
             
@@ -329,111 +341,88 @@ class CustomEnv(gym.Env):
                 "z": new_z
             }
             
+            # The rotation is needed for the function but isnt really used
             new_rotation = target_location.get("rotation", {"x": 0.0, "y": 0.0, "z": 0.0})
             
-            # Mover el objeto
+            # Update object position
             self.sim.setObjectLocation(self._object_id, new_position, new_rotation)
             
-            # Logging periódico
-            # INICIALIZACIÓN DE MOVIMIENTO CURVO
-            if not hasattr(self, 'target_direction'):
-                # 🔹 Solo elegimos si la curva es hacia IZQUIERDA (-1) o DERECHA (+1)
-                self.target_direction = random.choice([-1, 1])
-                
-                # 🔹 Siempre irá hacia ATRÁS (Z negativa)
-                self.z_direction = -1
-
-                # Velocidades base
-                self.target_speed_x = random.uniform(4.0, 6.0)  # lateral
-                self.target_speed_z = random.uniform(3.0, 5.0)  # profundidad
-
-                direction_name = "DERECHA" if self.target_direction > 0 else "IZQUIERDA"
-                print(f"\n  [Cilindro inicializado - Curva hacia atrás y a {direction_name}]")
-                print(f"      Velocidad X: {self.target_speed_x:.1f}, Velocidad Z: {self.target_speed_z:.1f}")
-
-            # MOVIMIENTO CURVO SIEMPRE HACIA ATRÁS
-            move_x = self.target_direction * self.target_speed_x  # lateral
-            move_z = -abs(self.target_speed_z)                    # siempre negativo (hacia atrás)
-
-            
         except Exception as e:
-            print(f"Error moviendo target: {e}")
+            print(f"Error moving target: {e}")
 
     def _calculate_reward(self, current_distance, blob_info):
         """
-        Calcula la recompensa basada en distancia y visión
+        Calculate reward based on distance and vision.
         
-        Estrategia de recompensa:
-        1. Recompensa por acercarse al objetivo
-        2. Bonificación por mantener el blob visible y centrado
-        3. Penalización por perder de vista el blob
-        4. Recompensa grande por alcanzar el objetivo
+        Reward strategy:
+        1. Reward for approaching target
+        2. Bonus for keeping blob visible and centered
+        3. Penalty for losing sight of blob
+        4. Large reward for reaching goal
         
         Args:
-            current_distance: Distancia actual al objetivo
-            blob_info: Información del blob detectado
+            current_distance: Current distance to target
+            blob_info: Detected blob information
         
         Returns:
-            float: Recompensa total
+            float: Total reward
         """
         reward = 0.0
         
-        # 1. Recompensa por reducir distancia
+        # 1. Reward for distance reduction
         if self.previous_distance is not None:
             distance_improvement = self.previous_distance - current_distance
-            # Usamos el 0.01 para evitar valores altos, de esta forma independientemente
-            # del valor de "distance_improvement"; obtendremos un valor bajo (normalmentee entre [-1,1]
-            reward += distance_improvement * 0.05 #CAMBIO de 0.1 a 0.05
+            reward += distance_improvement * 0.05
         
-        # 2. Recompensa por visibilidad del blob
+        # 2. Reward for blob visibility
         if blob_info["visible"] == 1.0:
-            reward += 0.2 #CAMBIO de 0.1 a 0.2
+            reward += 0.2
             
-            # Bonificación por centrar el blob
+            # Bonus for centering blob
             center_x = 50.0
             blob_x = blob_info["x"]
             distance_from_center = abs(blob_x - center_x)
             centering_reward = 0.2 * (1.0 - min(distance_from_center / 50.0, 1.0))
             reward += centering_reward
             
-            # Bonificación por tamaño del blob (más cerca = más grande)
+            # Bonus for blob size (closer = larger)
             size_reward = min(blob_info["size"] / 400.0, 1.0) * 0.1
             reward += size_reward
         else:
-            # Penalización por perder el blob
-            reward -= 0.15 # CAMBIO de 0.3 a 0.15
+            # Penalty for losing blob
+            reward -= 0.15
         
-        # 3. Recompensa por alcanzar el objetivo
+        # 3. Reward for reaching goal
         if current_distance < self.goal_threshold:
-            reward += 10.0 # CAMBIO de 5.0 a 10.0
+            reward += 10.0
         
         return reward
 
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
         """
-        Reinicia el entorno para un nuevo episodio
+        Reset environment for a new episode.
         
         Args:
-            seed: Semilla para reproducibilidad
-            options: Opciones adicionales
+            seed: Seed for reproducibility
+            options: Additional options
         
         Returns:
-            observation: Observación inicial
-            info: Información inicial
+            observation: Initial observation
+            info: Initial information
         """
         super().reset(seed=seed)
         
-        # Resetear simulación
+        # Reset simulation
         self.sim.resetSimulation()
         time.sleep(0.5)
         
-        # Resetear detección de blobs
+        # Reset blob detection
         self.robobo.resetColorBlobs()
         
-        # Reconfigurar cámara
+        # Reset camera
         self._setup_camera()
         
-        # Resetear contadores
+        # Reset counters
         self.current_step = 0
         info = self._get_info()
         self.initial_distance = info["distance"]
@@ -441,98 +430,88 @@ class CustomEnv(gym.Env):
         
         observation = self._get_obs()
         
-        # print(f"\n{'='*60}")
-        # print(f"NUEVO EPISODIO")
-        # print(f"Posición inicial agente: {info['agent_position']}")
-        # print(f"Posición objetivo: {info['target_position']}")
-        # print(f"Distancia inicial: {self.initial_distance:.1f}")
-        # print(f"{'='*60}\n")
-        
         return observation, info
 
     def step(self, action):
         """
-        Ejecuta una acción en el entorno
+        Execute an action in the environment.
         
         Args:
-            action: Array de 2 elementos [left_wheel_vel, right_wheel_vel] en [-1, 1]
+            action: Array of 2 elements [left_wheel_vel, right_wheel_vel] in [-1, 1]
         
         Returns:
-            observation: Nueva observación
-            reward: Recompensa obtenida
-            terminated: Si el episodio terminó (objetivo alcanzado)
-            truncated: Si el episodio fue truncado (max_steps alcanzado)
-            info: Información adicional
+            observation: New observation
+            reward: Obtained reward
+            terminated: Whether episode ended (goal reached)
+            truncated: Whether episode was truncated (max_steps reached)
+            info: Additional information
         """
         self.current_step += 1
 
-        # Mover el target en CADA paso (movimiento continuo y fluido)
-        # Solo si target_move_frequency es bajo (para fase 2)
+        # Move target every step 
+        # Only if target_move_frequency is low (for phase 2)
         if hasattr(self, 'target_move_frequency') and self.target_move_frequency < 100:
             self._move_target()
-            # Actualizamos la distancia previa después de mover el objetivo
-            # para que la recompensa no penalice al agente
+            # Update previous distance after moving target
+            # to avoid penalizing agent for target movement
             info_temp = self._get_info()
             self.previous_distance = info_temp["distance"]
 
-        # Validar y procesar acción
+        # Validate and process action
         action = np.asarray(action, dtype=np.float32).flatten()
         if action.size != 2:
-            raise ValueError(f"La acción debe tener 2 elementos, se recibieron {action.size}")
-        
+            raise ValueError(f"Action must have 2 elements, received {action.size}")
 
-        # ESTO CREO QUE MEJOR LOS EXPLIQUE LAURA
-        # DE AQUI ->
+        # Clip action values to valid range
         left_vel = float(np.clip(action[0], -1.0, 1.0))
         right_vel = float(np.clip(action[1], -1.0, 1.0))
 
-        # Ejecutar acción en el simulador
+        # Execute action in simulator
         try:
             left_motor = int(np.clip(left_vel * self.speed, -100, 100))
             right_motor = int(np.clip(right_vel * self.speed, -100, 100))
             
             self.robobo.moveWheelsByTime(right_motor, left_motor, self.wheels_time)
-            time.sleep(0.25)  # Esperar a que se complete la acción
+            # time.sleep(0.25)
             
         except Exception as e:
-            print(f"Error ejecutando acción: {e}")
-        # <- HASTA AQUI
+            print(f"Error executing action: {e}")
 
-        # Obtener nuevo estado
+        # Get new state
         observation = self._get_obs()
         info = self._get_info()
         current_distance = info["distance"]
         blob_info = self._get_blob_info()
         
-        # Calcular recompensa
+        # Calculate reward
         reward = self._calculate_reward(current_distance, blob_info)
         
-        # Verificar condiciones de terminación
-        terminated = current_distance < self.goal_threshold  # Fin de episodio por llegar a meta
-        truncated = self.current_step >= self.max_steps      # Fin de episodio por tiempo
+        # Check termination conditions
+        terminated = current_distance < self.goal_threshold  # Goal reached
+        truncated = self.current_step >= self.max_steps      # Time limit
         
         # Logging
         print(f"Step {self.current_step}/{self.max_steps} | "
-              f"Acción: L={left_vel:.2f} R={right_vel:.2f} | "
+              f"Action: L={left_vel:.2f} R={right_vel:.2f} | "
               f"Dist: {current_distance:.1f} | "
               f"Blob: {'1' if blob_info['visible'] else '0'} | "
               f"Reward: {reward:.2f}")
         
-        # Actualizar distancia previa
+        # Update previous distance
         self.previous_distance = current_distance
         
         return observation, reward, terminated, truncated, info
 
     def close(self):
-        """Limpia recursos al cerrar el entorno"""
+        """Clean up resources when closing environment."""
         try:
             self.robobo.disconnect()
             self.sim.disconnect()
-            print("Conexiones cerradas correctamente")
+            print("Connections closed successfully")
         except Exception as e:
-            print(f"Error cerrando conexiones: {e}")
+            print(f"Error closing connections: {e}")
         super().close()
 
     def render(self):
-        """Renderiza el entorno (opcional, no implementado)"""
+        """Render environment (not implemented)."""
         pass
