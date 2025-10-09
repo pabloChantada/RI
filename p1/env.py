@@ -253,7 +253,9 @@ class CustomEnv(gym.Env):
     
     def _move_target(self):
         """
-        Mueve el objetivo a una nueva posición cercana (para target móvil)
+        Mueve el objetivo en una trayectoria CURVA (como en tu dibujo)
+        El cilindro se mueve hacia adelante/atrás (Z) Y hacia los lados (X) simultáneamente
+        creando una curva suave hacia la izquierda o derecha
         """
         try:
             target_location = self.sim.getObjectLocation(self._object_id)
@@ -262,11 +264,62 @@ class CustomEnv(gym.Env):
             target_y = float(target_location["position"]["y"])
             target_z = float(target_location["position"]["z"])
             
-            # Movimiento aleatorio en x y z
-            new_x = target_x + random.choice([-20.0, 0.0])
-            new_z = target_z + random.choice([-20.0, 0.0])
+            # INICIALIZACIÓN DE MOVIMIENTO CURVO
             
-            # Mantener dentro de los límites del entorno
+            if not hasattr(self, 'target_direction'):
+                # Elegir dirección de la curva: -1 (curva izquierda) o +1 (curva derecha)
+                self.target_direction = random.choice([-1, 1])
+                self.target_speed_x = random.uniform(4.0, 6.0)  # Velocidad lateral
+                self.target_speed_z = random.uniform(3.0, 5.0)  # Velocidad hacia adelante/atrás
+                
+                # Elegir si va hacia el robot (negativo) o se aleja (positivo)
+                self.z_direction = random.choice([-1, 1])
+                
+                direction_name = "DERECHA" if self.target_direction > 0 else "IZQUIERDA"
+                z_direction_name = "HACIA ROBOT" if self.z_direction < 0 else "ALEJÁNDOSE"
+                print(f"\n  [🎯 Cilindro inicializado - Curva hacia {direction_name}, {z_direction_name}]")
+                print(f"      Velocidad X: {self.target_speed_x:.1f}, Velocidad Z: {self.target_speed_z:.1f}")
+            
+            # MOVIMIENTO CURVO SIMULTÁNEO EN X y Z
+            
+            move_x = self.target_direction * self.target_speed_x  # Movimiento lateral
+            move_z = self.z_direction * self.target_speed_z        # Movimiento adelante/atrás
+            
+            # Calcular nueva posición
+            new_x = target_x + move_x
+            new_z = target_z + move_z
+            
+            # DETECCIÓN DE BORDES Y CAMBIO DE DIRECCIÓN
+            
+            MARGIN_X = 150.0  # Margen lateral
+            MARGIN_Z = 150.0  # Margen frontal/trasero
+            changed_direction = False
+            
+            # Rebote en bordes laterales (X)
+            if new_x <= -1000.0 + MARGIN_X:
+                new_x = -1000.0 + MARGIN_X
+                self.target_direction = 1  # Ahora curva hacia la derecha
+                changed_direction = True
+                print(f"\n  [🔄 Rebote LATERAL IZQUIERDO - Ahora curva hacia DERECHA]")
+            elif new_x >= 1000.0 - MARGIN_X:
+                new_x = 1000.0 - MARGIN_X
+                self.target_direction = -1  # Ahora curva hacia la izquierda
+                changed_direction = True
+                print(f"\n  [🔄 Rebote LATERAL DERECHO - Ahora curva hacia IZQUIERDA]")
+            
+            # Rebote en bordes frontales/traseros (Z)
+            if new_z <= -1000.0 + MARGIN_Z:
+                new_z = -1000.0 + MARGIN_Z
+                self.z_direction = 1  # Ahora se aleja del robot
+                changed_direction = True
+                print(f"\n  [🔄 Rebote FRONTAL - Ahora se ALEJA]")
+            elif new_z >= 1000.0 - MARGIN_Z:
+                new_z = 1000.0 - MARGIN_Z
+                self.z_direction = -1  # Ahora va hacia el robot
+                changed_direction = True
+                print(f"\n  [🔄 Rebote TRASERO - Ahora va HACIA ROBOT]")
+            
+            # Asegurar que los valores estén en rango
             new_x = float(np.clip(new_x, -1000.0, 1000.0))
             new_z = float(np.clip(new_z, -1000.0, 1000.0))
             
@@ -275,14 +328,33 @@ class CustomEnv(gym.Env):
                 "y": target_y,
                 "z": new_z
             }
-            # Aqui es necesario usar la altura y rotacion por peticiones de la funcion de Robobo
-            # Pero realmente no serian necesarias y podria acortarse la funcion
+            
             new_rotation = target_location.get("rotation", {"x": 0.0, "y": 0.0, "z": 0.0})
             
+            # Mover el objeto
             self.sim.setObjectLocation(self._object_id, new_position, new_rotation)
-            time.sleep(0.3)
             
-            print(f"  [Target movido de ({target_x:.1f}, {target_z:.1f}) a ({new_x:.1f}, {new_z:.1f})]")
+            # Logging periódico
+            # INICIALIZACIÓN DE MOVIMIENTO CURVO
+            if not hasattr(self, 'target_direction'):
+                # 🔹 Solo elegimos si la curva es hacia IZQUIERDA (-1) o DERECHA (+1)
+                self.target_direction = random.choice([-1, 1])
+                
+                # 🔹 Siempre irá hacia ATRÁS (Z negativa)
+                self.z_direction = -1
+
+                # Velocidades base
+                self.target_speed_x = random.uniform(4.0, 6.0)  # lateral
+                self.target_speed_z = random.uniform(3.0, 5.0)  # profundidad
+
+                direction_name = "DERECHA" if self.target_direction > 0 else "IZQUIERDA"
+                print(f"\n  [Cilindro inicializado - Curva hacia atrás y a {direction_name}]")
+                print(f"      Velocidad X: {self.target_speed_x:.1f}, Velocidad Z: {self.target_speed_z:.1f}")
+
+            # MOVIMIENTO CURVO SIEMPRE HACIA ATRÁS
+            move_x = self.target_direction * self.target_speed_x  # lateral
+            move_z = -abs(self.target_speed_z)                    # siempre negativo (hacia atrás)
+
             
         except Exception as e:
             print(f"Error moviendo target: {e}")
@@ -394,8 +466,9 @@ class CustomEnv(gym.Env):
         """
         self.current_step += 1
 
-        # Mover el target cada N pasos
-        if self.current_step % self.target_move_frequency == 0:
+        # Mover el target en CADA paso (movimiento continuo y fluido)
+        # Solo si target_move_frequency es bajo (para fase 2)
+        if hasattr(self, 'target_move_frequency') and self.target_move_frequency < 100:
             self._move_target()
             # Actualizamos la distancia previa después de mover el objetivo
             # para que la recompensa no penalice al agente
@@ -463,4 +536,3 @@ class CustomEnv(gym.Env):
     def render(self):
         """Renderiza el entorno (opcional, no implementado)"""
         pass
-

@@ -17,11 +17,11 @@ from env import CustomEnv
 MAX_STEPS_PER_EPISODE = 30   # Pasos máximos por episodio
 
 # FASE 1: Target Estático
-EPISODES_PHASE1 = 234
+EPISODES_PHASE1 = 2
 TIMESTEPS_PHASE1 = MAX_STEPS_PER_EPISODE * EPISODES_PHASE1  # 6000 timesteps
 
 # FASE 2: Target Móvil
-EPISODES_PHASE2 = 100
+EPISODES_PHASE2 = 20
 TIMESTEPS_PHASE2 = MAX_STEPS_PER_EPISODE * EPISODES_PHASE2  # 3000 timesteps
 
 # Total del entrenamiento
@@ -258,7 +258,7 @@ def train_model_curriculum():
     def make_env_moving():
         monitor_filename = os.path.join(LOG_DIR, "phase2_monitor.csv")
         env = CustomEnv(size=1000, max_steps=MAX_STEPS_PER_EPISODE)
-        env.target_move_frequency = 10  # Target se mueve cada 10 pasos
+        env.target_move_frequency = 1  # Target se mueve cada 10 pasos
         env = Monitor(env, filename=monitor_filename)
         return env
 
