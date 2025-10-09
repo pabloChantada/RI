@@ -17,11 +17,11 @@ from env import CustomEnv
 MAX_STEPS_PER_EPISODE = 30   # Pasos máximos por episodio
 
 # FASE 1: Target Estático
-EPISODES_PHASE1 = 2
+EPISODES_PHASE1 = 234
 TIMESTEPS_PHASE1 = MAX_STEPS_PER_EPISODE * EPISODES_PHASE1  # 6000 timesteps
 
 # FASE 2: Target Móvil
-EPISODES_PHASE2 = 20
+EPISODES_PHASE2 = 100
 TIMESTEPS_PHASE2 = MAX_STEPS_PER_EPISODE * EPISODES_PHASE2  # 3000 timesteps
 
 # Total del entrenamiento

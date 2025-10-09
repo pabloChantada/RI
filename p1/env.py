@@ -277,7 +277,7 @@ class CustomEnv(gym.Env):
                 
                 direction_name = "DERECHA" if self.target_direction > 0 else "IZQUIERDA"
                 z_direction_name = "HACIA ROBOT" if self.z_direction < 0 else "ALEJÁNDOSE"
-                print(f"\n  [🎯 Cilindro inicializado - Curva hacia {direction_name}, {z_direction_name}]")
+                print(f"\n  [Cilindro inicializado - Curva hacia {direction_name}, {z_direction_name}]")
                 print(f"      Velocidad X: {self.target_speed_x:.1f}, Velocidad Z: {self.target_speed_z:.1f}")
             
             # MOVIMIENTO CURVO SIMULTÁNEO EN X y Z

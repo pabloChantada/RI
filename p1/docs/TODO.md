@@ -1,8 +1,8 @@
 # Chipichanti
-- Crear memoria
-- Cambiar los steps a un conf o .env para facilidad
+- Continuar memoria
 - Pequeño bug en los ultimos episodios (Seguramente sea por falta de sleeps en el codigo
 y sobrecarga de mensajes)
+- Espabilar
 
 # Lau
-- Intentar conseguir ejecuciones buenas
+- Ya hizo todo es la mejor
