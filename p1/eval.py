@@ -183,22 +183,47 @@ def plot_trajectories(traj_agent, traj_target, episode_info, half=1000,
 # MAIN EXECUTION
 # ============================================================================
 
-if __name__ == "__main__":
-    # Create environment with consistent max_steps
-    env = CustomEnv(size=1000, max_steps=30)
+# if __name__ == "__main__":
+#     # Create environment with consistent max_steps
+#     env = CustomEnv(size=1000, max_steps=30)
     
-    # Load trained model
+#     # Load trained model
+#     model_path = os.path.join(MODELS_DIR, "sac_cylinder_final.zip")
+#     if not os.path.exists(model_path):
+#         print(f"ERROR: Model not found at {model_path}")
+#         print("Make sure to train the model first with train.py")
+#         exit(1)
+    
+#     print(f"Loading model from: {model_path}")
+#     model = SAC.load(model_path, env=env, device="cpu")
+    
+#     # Run evaluation
+#     run_evaluation(env, model)
+    
+#     # Close environment
+#     env.close()
+
+if __name__ == "__main__":
+
+    env = CustomEnv(size=1000, max_steps=30)
+
+    env.target_move_frequency = 1  
+
+    env.target_speed_x = 12.0  # Velocidad lateral rápida
+    env.target_speed_z = 10.0  # Velocidad profundidad rápida
+
+
     model_path = os.path.join(MODELS_DIR, "sac_cylinder_final.zip")
     if not os.path.exists(model_path):
         print(f"ERROR: Model not found at {model_path}")
         print("Make sure to train the model first with train.py")
         exit(1)
-    
+
     print(f"Loading model from: {model_path}")
     model = SAC.load(model_path, env=env, device="cpu")
-    
+
     # Run evaluation
     run_evaluation(env, model)
-    
+
     # Close environment
     env.close()
