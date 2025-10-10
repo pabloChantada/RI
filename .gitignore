@@ -209,6 +209,8 @@ rob_env/
 .DS_Store/
 runs/
 checkpoints/
-models/
-logs/
+p1/models/sac_cylinder_phase1.zip
+p1/logs/*.csv
+p1/logs/*.npz
+
 .DS_Store/
