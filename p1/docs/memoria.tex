@@ -40,8 +40,8 @@
 \author{
     Pablo Chantada Saborido -
     \texttt{pablo.chantada@udc.es}\\
-    Laura Cabaleiro -
-    \texttt{laura.cabaleiro@udc.es}\\
+    Laura Cabaleiro Pintos -
+    \texttt{laura.cabaleiro.pintos@udc.es}\\
     Robótica Inteligente Aplicada\\
     Universidad de A Coruña
 }
@@ -170,43 +170,53 @@ El sistema consta de tres componentes principales:
 
 \subsection{Características Especiales}
 
-\textbf{Curriculum Learning:} El entrenamiento se divide en dos fases. En la Fase 1 (234 episodios), el cilindro permanece estático para que el agente aprenda comportamientos básicos. En la Fase 2 (100 episodios), el cilindro se mueve de manera continua con trayectorias curvas.
+El entrenamiento se divide en dos fases. En la Fase 1 (234 episodios), el cilindro permanece estático para que el agente aprenda comportamientos básicos. En la Fase 2 (100 episodios), el cilindro se mueve de manera continua con trayectorias curvas.
+
+\setlength{\parskip}{0.5em}
 
 \textbf{Normalización:} Todas las observaciones están normalizadas en rangos [-1, 1] o [0, 1] para facilitar el aprendizaje.
 
-\section{Resultados Experimentales}
+\section{Resultados Experimentales} 
 
 \subsection{Métricas de Entrenamiento}
 
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.8\textwidth]{logs/episode_metrics_phase1.png}
-    \caption{Evolución de métricas durante el entrenamiento (Fase 1). (a) Recompensa total por episodio. (b) Mejora en distancia respecto al inicio. (c) Evolución de distancias.}
-    \label{fig:training_metrics_phase1}
-\end{figure}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.8\textwidth]{logs/episode_metrics_phase2.png}
-    \caption{Evolución de métricas durante el entrenamiento (Fase 2). Adaptación al objetivo móvil.}
-    \label{fig:training_metrics_phase2}
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{logs/episode_metrics_phase1.png}
+        \caption{Fase 1: objetivo estático.}
+        \label{fig:metrics_phase1}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{logs/episode_metrics_phase2.png}
+        \caption{Fase 2: objetivo móvil.}
+        \label{fig:metrics_phase2}
+    \end{subfigure}
+    \caption{Evolución de las métricas de entrenamiento en ambas fases. Se observa una transición desde un comportamiento irregular hacia un aprendizaje estable y consistente.}
+    \label{fig:training_metrics_comparison}
 \end{figure}
+
 
 \textbf{Análisis:}
-\begin{itemize}
-    \item El la \textbf{Fase 1} podemos observar un rendimiento más errático, incluso con iteraciones donde la mejora de distancia es negativa. Mientras que la \textbf{Fase 2}, obtiene resultados mucho mas estables índicando un correcto funcionamiento del aprendizaje y algoritmo.
-    \item La recompensa media aumenta progresivamente, con caídas en los reinicios de los episodios. Sin embargo, podemos observar una clara mejora en el tiempo, demostrando así el aprendizaje.
-    \item La distancia final al objetivo se reduce consistentemente, indicando que conforme pasa el tiempo, el agente tarda menos en alcanzar un buen rendimiento.
-\end{itemize}
+
+En la \textbf{Fase 1} se observa un comportamiento irregular, con episodios en los que la mejora de la distancia es negativa. En la \textbf{Fase 2}, el rendimiento se vuelve más estable, evidenciando un aprendizaje efectivo.
+
+La \textbf{recompensa media} aumenta progresivamente, con ligeras caídas tras los reinicios de los episodios, mientras que la \textbf{distancia final al objetivo} disminuye de forma constante, indicando que el agente mejora su capacidad para alcanzar el objetivo en menos pasos.
+
 
 \subsection{Trayectorias 2D}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.7\textwidth]{logs/evaluation_trajectory.png}
+    \includegraphics[width=0.4\textwidth]{logs/evaluation_trajectory.png}
     \caption{Trayectoria del agente (azul) siguiendo el cilindro móvil (rojo). Los marcadores indican posiciones de inicio y fin.}
     \label{fig:trajectories}
 \end{figure}
+
 
 \subsection{Rendimiento del Sistema}
 
@@ -226,31 +236,5 @@ Tiempo de entrenamiento & $\sim$45-60 min \\ \bottomrule
 \section{Conclusiones}
 
 El robot obtiene un rendimiento correcto y rápido, demostrando la capacidad de adaptación del \textbf{Aprendizaje por Refuerzo} a nuevos entornos. Además, se observa el valor de la normalización y discretización de los espacios gracias al esquema obtenido de Gymnasium. Si bien puede ser un algoritmo insuficiente para tareas más complejas, demuestra su valor en entornos relativamente reales.
-
-\subsection{Limitaciones y Trabajo Futuro}
-
-Los mayores retos se encontraron en la creación de la discretización, normalización y diseño del entorno, más que en el propio entrenamiento e iteraciones. El ajuste de hiperparámetros y conceptualización del entorno fue uno de los mayores consumos de tiempo a la hora de realizar la práctica. En iteraciones siguientes sería interesante: crear un control para evitar colisiones, aumentar la sensorización y el espacio de acciones, o mezclar técnicas como el PID.
-
-\section{Instrucciones de Ejecución}
-
-\subsection{Dependencias}
-\begin{lstlisting}[language=bash]
-pip install -r requirements.txt
-\end{lstlisting}
-
-\subsection{Entrenamiento}
-\begin{lstlisting}[language=bash]
-python train.py
-\end{lstlisting}
-
-\subsection{Evaluación}
-\begin{lstlisting}[language=bash]
-python eval.py
-\end{lstlisting}
-
-\subsection{Ejecución completa}
-\begin{lstlisting}[language=bash]
-bash run.sh
-\end{lstlisting}
 
 \end{document}
