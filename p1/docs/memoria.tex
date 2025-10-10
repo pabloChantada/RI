@@ -7,6 +7,9 @@
 \usepackage{amsmath}
 \usepackage{hyperref}
 \usepackage{float}
+\usepackage{subcaption}
+\usepackage{listings}
+\usepackage{xcolor}
 \usepackage{geometry}
 \usepackage{booktabs}
 
@@ -14,162 +17,198 @@
 \geometry{
     left=2.5cm,
     right=2.5cm,
-    top=2cm,
-    bottom=2cm
+    top=2.5cm,
+    bottom=2.5cm
+}
+
+% Configuración de código
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    breaklines=true,
+    frame=single,
+    captionpos=b
 }
 
 % Información del documento
-\title{\textbf{Práctica 01: Aprendizaje por Refuerzo\\Seguimiento de Objetivo Móvil}}
+\title{\textbf{Práctica 01: Aprendizaje por Refuerzo}}
 \author{
-    Pablo Chantada - \texttt{pablo.chantada@udc.es}\\
-    Laura Pérez - \texttt{laura.perez@udc.es}\\
-    Robótica e Inteligencia Artificial\\
+    Pablo Chantada Saborido -
+    \texttt{pablo.chantada@udc.es}\\
+    Laura Cabaleiro -
+    \texttt{laura.cabaleiro@udc.es}\\
+    Robótica Inteligente Aplicada\\
     Universidad de A Coruña
 }
-\date{10 de Octubre de 2025}
 
 \begin{document}
 
 \maketitle
 
-\section{Introducción y Definición del Problema}
-
-Esta práctica implementa un sistema de aprendizaje por refuerzo para que el robot Robobo aprenda a seguir un cilindro rojo en movimiento dentro del escenario "cylinder" de RoboboSim. El sistema utiliza el framework Gymnasium y la librería Stable-Baselines3.
+\section{Definición del Problema}
 
 \subsection{Espacio de Observaciones}
 
-El espacio de observaciones es \textbf{continuo} de 8 dimensiones, todas normalizadas:
+El espacio de observaciones es \textbf{continuo} (8 dimensiones) y contiene:
 
 \begin{table}[H]
 \centering
-\small
 \begin{tabular}{@{}lll@{}}
 \toprule
 \textbf{Variable} & \textbf{Rango} & \textbf{Descripción} \\ \midrule
-Posición agente $(x, z)$ & $[-1, 1]$ & Posición normalizada del robot \\
-Posición objetivo $(x, z)$ & $[-1, 1]$ & Posición normalizada del cilindro \\
-Blob visible & $\{0, 1\}$ & Visibilidad del cilindro en cámara \\
-Posición blob $(x, y)$ & $[-1, 1]$ & Centrado en cámara \\
-Tamaño blob & $[0, 1]$ & Tamaño normalizado (correlación con distancia) \\ \bottomrule
+Posición agente (x, z) & [-1, 1] & Posición normalizada del robot \\
+Posición objetivo (x, z) & [-1, 1] & Posición normalizada del cilindro \\
+Blob visible & \{0, 1\} & Visibilidad del cilindro en cámara \\
+Posición blob (x, y) & [-1, 1] & Posición del blob en cámara \\
+Tamaño blob & [0, 1] & Tamaño del blob (distancia) \\ \bottomrule
 \end{tabular}
-\caption{Componentes del espacio de observaciones}
+\caption{Elementos del espacio de observaciones}
 \end{table}
 
-\textbf{Justificación:} Se combinan datos de posicionamiento absoluto (posiciones en el simulador) con información visual (detección de blobs), permitiendo al agente desarrollar estrategias robustas incluso cuando pierde de vista el objetivo.
+\textbf{Justificación:} Se utiliza espacio continuo para mayor precisión y se combinan datos de posicionamiento absoluto (posiciones de los elementos) con información visual.
 
 \subsection{Espacio de Acciones}
 
 Espacio \textbf{continuo} bidimensional:
 \begin{equation}
-\mathbf{a} = [v_{\text{izq}}, v_{\text{der}}] \in [-1, 1]^2
+\mathbf{a} = [v_{\text{left}}, v_{\text{right}}]
 \end{equation}
 
-Las velocidades se escalan a $[-20, 20]$ para los motores del Robobo, ejecutándose durante 0.25 segundos.
+donde $v_{\text{left}}$ y $v_{\text{right}}$ son las velocidades normalizadas de las ruedas izquierda y derecha.
 
-\textbf{Justificación:} Las acciones continuas permiten movimientos suaves y precisos, fundamentales para seguir objetivos en movimiento.
+\textbf{Escalado al motor:} Las acciones se transforman mediante:
+\begin{equation}
+v_{\text{motor}} = \text{clip}(v_{\text{norm}} \times S, -100, 100)
+\end{equation}
+
+resultando en un rango efectivo de $[-S, S]$, donde $S$ indica la velocidad máxima de las ruedas ($[-20, 20]$). 
+
+\textbf{Justificación:} Las acciones continuas permiten movimientos suaves y precisos. El factor de escala ($S$) proporciona control y estabilidad.
+
 
 \subsection{Función de Recompensa}
 
-Función multi-componente que balancea varios objetivos:
+La función de recompensa combina múltiples componentes:
 
 \begin{equation}
 R_t = R_{\text{dist}} + R_{\text{vis}} + R_{\text{goal}}
 \end{equation}
 
-\textbf{Componentes:}
+Donde:
+
 \begin{itemize}
-    \item $R_{\text{dist}} = 0.05 \times (d_{t-1} - d_t)$: Recompensa por reducir distancia
-    \item $R_{\text{vis}} = 0.2$ si visible + bonus centrado $(0.2 \times (1 - |x_{blob}-50|/50))$ + bonus tamaño $(0.1 \times s_{blob}/400)$
-    \item Penalización: $-0.15$ si blob no visible
-    \item $R_{\text{goal}} = 10.0$ si $d_t < 150$ (objetivo alcanzado)
+    \item \textbf{Recompensa por distancia} ($R_{\text{dist}}$):
+    \begin{equation}
+    R_{\text{dist}} = 0.05 \times (d_{t-1} - d_t)
+    \end{equation}
+    
+    \item \textbf{Recompensa por visibilidad} ($R_{\text{vis}}$):
+    \begin{align}
+    R_{\text{vis}} = \begin{cases}
+    0.2 + 0.2 \times (1 - \frac{|x_{\text{blob}} - 50|}{50}) + 0.1 \times \frac{\text{size}_{\text{blob}}}{400} & \text{si visible} \\
+    -0.15 & \text{si no visible}
+    \end{cases}
+    \end{align}
+    Recompensa por mantener el blob visible y centrado, teniendo en cuenta su tamaño.
+    
+    \item \textbf{Recompensa por objetivo alcanzado} ($R_{\text{goal}}$):
+    \begin{equation}
+    R_{\text{goal}} = \begin{cases}
+    10.0 & \text{si } d_t < 150 \\
+    0 & \text{en otro caso}
+    \end{cases}
+    \end{equation}
 \end{itemize}
+
+\textbf{Justificación:} Esta recompensa, basada en múltiples aspectos (visión, cámara, tamaño del blob, etc.), permite al agente explotar al máximo el espacio de observación, proporcionando una señal de recompensa mucho más rica y realista que usar únicamente la distancia absoluta.
 
 \section{Implementación}
 
-\subsection{Algoritmo: SAC con Curriculum Learning}
+\subsection{Algoritmo de Aprendizaje: SAC}
 
-Se seleccionó \textbf{Soft Actor-Critic (SAC)} en lugar del sugerido PPO por:
-\begin{itemize}
-    \item \textbf{Off-policy}: Mayor eficiencia con replay buffer
-    \item \textbf{Estabilidad}: Dual Q-networks reduce sobreestimación
-    \item \textbf{Exploración}: Maximum entropy mejora la robustez
-    \item \textbf{Control continuo}: Optimizado para espacios de acción continuos
-\end{itemize}
+Se seleccionó \textbf{Soft Actor-Critic (SAC)}\footnote{Aún no habíamos llegado a la teoría de SAC.} por un mejor rendimiento en comparación con otros modelos, principalmente PPO y DQN. Este mejor rendimiento se obtuvo a través de prueba y error con iteraciones básicas. Es muy posible que otros algoritmos obtengan un rendimiento similar o superior.
 
-Se implementó \textbf{curriculum learning} en dos fases:
-
-\textbf{Fase 1 - Target Estático:} 234 episodios (7,020 timesteps) con el cilindro inmóvil. El agente aprende comportamientos básicos: acercarse y mantener visión del objetivo.
-
-\textbf{Fase 2 - Target Móvil:} 100 episodios (3,000 timesteps) con el cilindro moviéndose en trayectorias curvas cada paso. El agente adapta la política aprendida a objetivos dinámicos.
-
-\subsection{Hiperparámetros SAC}
+\subsection{Hiperparámetros}
 
 \begin{table}[H]
 \centering
 \begin{tabular}{@{}ll@{}}
 \toprule
 \textbf{Parámetro} & \textbf{Valor} \\ \midrule
-Learning rate & $3 \times 10^{-4}$ \\
-$\gamma$ (discount factor) & 0.95 \\
+Algoritmo & SAC \\
+Learning rate & 3e-4 \\
+Gamma (factor de descuento) & 0.95 \\
 Buffer size & 2,000 \\
 Batch size & 64 \\
-$\tau$ (soft update) & 0.005 \\
+Tau (soft update) & 0.005 \\
 Learning starts & 500 \\
 Train frequency & 2 \\
 Gradient steps & 2 \\
 Entropy coefficient & auto \\
-\textbf{Total timesteps} & \textbf{10,020} \\
-\textbf{Episodios totales} & \textbf{334} \\
-Pasos por episodio & 30 \\ \bottomrule
+Episodios Fase 1 & 234 \\
+Episodios Fase 2 & 100 \\
+Pasos por episodio & 30 \\
+\textbf{Total timesteps} & \textbf{10,020} \\ \bottomrule
 \end{tabular}
-\caption{Configuración de hiperparámetros SAC}
+\caption{Configuración de hiperparámetros}
 \end{table}
 
 \subsection{Arquitectura del Sistema}
 
-\textbf{Estructura modular:}
+El sistema consta de tres componentes principales:
+
 \begin{enumerate}
-    \item \texttt{env.py}: Entorno Gymnasium personalizado (\texttt{CustomEnv})
-    \item \texttt{train.py}: Pipeline de entrenamiento con curriculum learning
-    \item \texttt{eval.py}: Evaluación y visualización de trayectorias
+    \item \textbf{Environment} (\texttt{env.py}): Implementa \texttt{gym.Env}
+    \item \textbf{Training} (\texttt{train.py}): Entrenamiento con callbacks
+    \item \textbf{Evaluation} (\texttt{eval.py}): Validación del modelo
 \end{enumerate}
 
-\textbf{Movimiento del objetivo:} Trayectoria curva continua con rebotes en bordes del escenario, variando velocidades laterales (4-6 u/s) y longitudinales (3-5 u/s).
+\subsection{Características Especiales}
+
+\textbf{Curriculum Learning:} El entrenamiento se divide en dos fases. En la Fase 1 (234 episodios), el cilindro permanece estático para que el agente aprenda comportamientos básicos. En la Fase 2 (100 episodios), el cilindro se mueve de manera continua con trayectorias curvas.
+
+\textbf{Normalización:} Todas las observaciones están normalizadas en rangos [-1, 1] o [0, 1] para facilitar el aprendizaje.
 
 \section{Resultados Experimentales}
 
-\subsection{Convergencia del Entrenamiento}
+\subsection{Métricas de Entrenamiento}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.95\textwidth]{logs/episode_metrics_phase1.png}
-    \caption{Métricas Fase 1 (Target Estático): (a) Recompensa total creciente. (b) Mejora consistente en distancia. (c) Reducción progresiva de distancia final.}
+    \includegraphics[width=0.8\textwidth]{logs/episode_metrics_phase1.png}
+    \caption{Evolución de métricas durante el entrenamiento (Fase 1). (a) Recompensa total por episodio. (b) Mejora en distancia respecto al inicio. (c) Evolución de distancias.}
+    \label{fig:training_metrics_phase1}
 \end{figure}
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.95\textwidth]{logs/episode_metrics_phase2.png}
-    \caption{Métricas Fase 2 (Target Móvil): Adaptación a objetivo dinámico con ligera caída inicial en recompensa, seguida de recuperación.}
+    \includegraphics[width=0.8\textwidth]{logs/episode_metrics_phase2.png}
+    \caption{Evolución de métricas durante el entrenamiento (Fase 2). Adaptación al objetivo móvil.}
+    \label{fig:training_metrics_phase2}
 \end{figure}
 
-\textbf{Observaciones:}
+\textbf{Análisis:}
 \begin{itemize}
-    \item Fase 1: Convergencia rápida ($\sim$150 episodios) con recompensas estables
-    \item Fase 2: Adaptación exitosa al target móvil manteniendo comportamientos aprendidos
-    \item Distancia final promedio: $<$ 200 unidades (objetivo: 150)
+    \item El la \textbf{Fase 1} podemos observar un rendimiento más errático, incluso con iteraciones donde la mejora de distancia es negativa. Mientras que la \textbf{Fase 2}, obtiene resultados mucho mas estables índicando un correcto funcionamiento del aprendizaje y algoritmo.
+    \item La recompensa media aumenta progresivamente, con caídas en los reinicios de los episodios. Sin embargo, podemos observar una clara mejora en el tiempo, demostrando así el aprendizaje.
+    \item La distancia final al objetivo se reduce consistentemente, indicando que conforme pasa el tiempo, el agente tarda menos en alcanzar un buen rendimiento.
 \end{itemize}
 
-\subsection{Validación: Trayectorias 2D}
+\subsection{Trayectorias 2D}
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.7\textwidth]{logs/evaluation_trajectory.png}
-    \caption{Trayectoria del agente (azul) siguiendo el cilindro (rojo). Marcadores: inicio agente (X verde), inicio cilindro (○ rojo), fin agente (★ azul).}
+    \caption{Trayectoria del agente (azul) siguiendo el cilindro móvil (rojo). Los marcadores indican posiciones de inicio y fin.}
+    \label{fig:trajectories}
 \end{figure}
 
-El agente demuestra capacidad de seguimiento anticipando movimientos del objetivo y corrigiendo trayectoria dinámicamente.
-
-\subsection{Métricas de Rendimiento}
+\subsection{Rendimiento del Sistema}
 
 \begin{table}[H]
 \centering
@@ -177,56 +216,41 @@ El agente demuestra capacidad de seguimiento anticipando movimientos del objetiv
 \toprule
 \textbf{Métrica} & \textbf{Valor} \\ \midrule
 Pasos para convergencia Fase 1 & $\sim$4,500 \\
-Recompensa media final Fase 1 & +2.5 - +4.0 \\
-Recompensa media final Fase 2 & +1.5 - +3.0 \\
-Tiempo entrenamiento total & $\sim$45-60 min \\
-Éxito (d < 150) en evaluación & Variable† \\ \bottomrule
-\multicolumn{2}{l}{\footnotesize † Depende de trayectoria aleatoria del objetivo}
+Recompensa media Fase 1 & +2.5 a +4.0 \\
+Recompensa media Fase 2 & +1.5 a +3.0 \\
+Tiempo de entrenamiento & $\sim$45-60 min \\ \bottomrule
 \end{tabular}
-\caption{Rendimiento del sistema (valores aproximados)}
+\caption{Métricas de rendimiento del sistema}
 \end{table}
 
 \section{Conclusiones}
 
-\textbf{Logros principales:}
-\begin{itemize}
-    \item Implementación completa de entorno Gymnasium + RoboboSim
-    \item Entrenamiento exitoso con SAC en espacios continuos
-    \item Curriculum learning efectivo para transferencia de conocimiento
-    \item Función de recompensa multi-objetivo balanceada
-    \item Sistema capaz de seguir objetivos móviles con trayectorias complejas
-\end{itemize}
+El robot obtiene un rendimiento correcto y rápido, demostrando la capacidad de adaptación del \textbf{Aprendizaje por Refuerzo} a nuevos entornos. Además, se observa el valor de la normalización y discretización de los espacios gracias al esquema obtenido de Gymnasium. Si bien puede ser un algoritmo insuficiente para tareas más complejas, demuestra su valor en entornos relativamente reales.
 
-\textbf{Limitaciones y trabajo futuro:}
-\begin{itemize}
-    \item \textbf{Generalización}: Evaluar con diferentes patrones de movimiento del objetivo
-    \item \textbf{Robustez}: Añadir ruido a observaciones para simular condiciones reales
-    \item \textbf{Eficiencia}: Explorar PPO y comparar con SAC
-    \item \textbf{Transferencia}: Validar política en robot Robobo real
-    \item \textbf{Extensiones}: Entornos con obstáculos, múltiples objetivos
-\end{itemize}
+\subsection{Limitaciones y Trabajo Futuro}
 
-\textbf{Lecciones aprendidas:}
-\begin{enumerate}
-    \item La normalización de observaciones es crítica para convergencia
-    \item El curriculum learning acelera significativamente el aprendizaje en tareas complejas
-    \item El balance de componentes en la recompensa requiere experimentación iterativa
-    \item SAC muestra excelente rendimiento en control continuo robotizado
-\end{enumerate}
+Los mayores retos se encontraron en la creación de la discretización, normalización y diseño del entorno, más que en el propio entrenamiento e iteraciones. El ajuste de hiperparámetros y conceptualización del entorno fue uno de los mayores consumos de tiempo a la hora de realizar la práctica. En iteraciones siguientes sería interesante: crear un control para evitar colisiones, aumentar la sensorización y el espacio de acciones, o mezclar técnicas como el PID.
 
-\section*{Instrucciones de Ejecución}
+\section{Instrucciones de Ejecución}
 
-\textbf{Dependencias:}
-\begin{verbatim}
-pip install gymnasium stable-baselines3[extra]
-pip install numpy pandas matplotlib seaborn
-pip install robobopy robobosim
-\end{verbatim}
+\subsection{Dependencias}
+\begin{lstlisting}[language=bash]
+pip install -r requirements.txt
+\end{lstlisting}
 
-\textbf{Entrenamiento:} \texttt{python train.py}
+\subsection{Entrenamiento}
+\begin{lstlisting}[language=bash]
+python train.py
+\end{lstlisting}
 
-\textbf{Evaluación:} \texttt{python eval.py}
+\subsection{Evaluación}
+\begin{lstlisting}[language=bash]
+python eval.py
+\end{lstlisting}
 
-\textbf{Nota:} Se recomienda ejecutar RoboboSim con física simplificada a velocidad x10.
+\subsection{Ejecución completa}
+\begin{lstlisting}[language=bash]
+bash run.sh
+\end{lstlisting}
 
 \end{document}
