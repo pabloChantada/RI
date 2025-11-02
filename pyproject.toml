@@ -1,22 +1,22 @@
-[project]
-name = "ri"
+[tool.poetry]
+name = "ri-practicas"
 version = "0.1.0"
-description = ""
-authors = [
-    {name = "Pablo Chantada",email = "pablo.chantada@udc.es"}
-]
+description = "Prácticas de Robótica Inteligente - Universidad"
+authors = ["clown <clown@circus.local>"]
 readme = "README.md"
-requires-python = ">=3.13"
-dependencies = [
-    "neat-python (>=0.92,<0.93)",
-    "gymnasium (>=1.2.1,<2.0.0)",
-    "robobopy (>=1.5.0,<2.0.0)",
-    "robobosim (>=1.5.1,<2.0.0)",
-    "graphviz (>=0.21,<0.22)",
-    "matplotlib (>=3.10.7,<4.0.0)"
-]
+package-mode = false
 
+[tool.poetry.dependencies]
+python = ">=3.13, <3.15"
+neat-python = "^0.92"
+gymnasium = "^1.2.1"
+numpy = "^2.3.4"
+matplotlib = "^3.10.7"
+graphviz = "^0.21"
+robobopy = "^1.5.0"
+robobosim = "^1.5.1"
+stable-baselines3 = "^2.7.0"
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
+requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
