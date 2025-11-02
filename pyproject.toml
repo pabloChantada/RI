@@ -11,7 +11,9 @@ dependencies = [
     "neat-python (>=0.92,<0.93)",
     "gymnasium (>=1.2.1,<2.0.0)",
     "robobopy (>=1.5.0,<2.0.0)",
-    "robobosim (>=1.5.1,<2.0.0)"
+    "robobosim (>=1.5.1,<2.0.0)",
+    "graphviz (>=0.21,<0.22)",
+    "matplotlib (>=3.10.7,<4.0.0)"
 ]
 
 

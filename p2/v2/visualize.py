@@ -1,16 +1,18 @@
-
 import warnings
-
 import graphviz
 import matplotlib.pyplot as plt
 import numpy as np
+import pickle
+
 
 class Visualizer:
     @staticmethod
-    def plot_stats(statistics, ylog=False, view=False, filename='avg_fitness.svg'):
-        """ Plots the population's average and best fitness. """
+    def plot_stats(statistics, ylog=False, view=False, filename="avg_fitness.svg"):
+        """Plots the population's average and best fitness."""
         if plt is None:
-            warnings.warn("This display is not available due to a missing optional dependency (matplotlib)")
+            warnings.warn(
+                "This display is not available due to a missing optional dependency (matplotlib)"
+            )
             return
 
         generation = range(len(statistics.most_fit_genomes))
@@ -18,10 +20,10 @@ class Visualizer:
         avg_fitness = np.array(statistics.get_fitness_mean())
         stdev_fitness = np.array(statistics.get_fitness_stdev())
 
-        plt.plot(generation, avg_fitness, 'b-', label="average")
-        plt.plot(generation, avg_fitness - stdev_fitness, 'g-.', label="-1 sd")
-        plt.plot(generation, avg_fitness + stdev_fitness, 'g-.', label="+1 sd")
-        plt.plot(generation, best_fitness, 'r-', label="best")
+        plt.plot(generation, avg_fitness, "b-", label="average")
+        plt.plot(generation, avg_fitness - stdev_fitness, "g-.", label="-1 sd")
+        plt.plot(generation, avg_fitness + stdev_fitness, "g-.", label="+1 sd")
+        plt.plot(generation, best_fitness, "r-", label="best")
 
         plt.title("Population's average and best fitness")
         plt.xlabel("Generations")
@@ -29,7 +31,7 @@ class Visualizer:
         plt.grid()
         plt.legend(loc="best")
         if ylog:
-            plt.gca().set_yscale('symlog')
+            plt.gca().set_yscale("symlog")
 
         plt.savefig(filename)
         if view:
@@ -38,10 +40,12 @@ class Visualizer:
         plt.close()
 
     @staticmethod
-    def plot_species(statistics, view=False, filename='speciation.svg'):
-        """ Visualizes speciation throughout evolution. """
+    def plot_species(statistics, view=False, filename="speciation.svg"):
+        """Visualizes speciation throughout evolution."""
         if plt is None:
-            warnings.warn("This display is not available due to a missing optional dependency (matplotlib)")
+            warnings.warn(
+                "This display is not available due to a missing optional dependency (matplotlib)"
+            )
             return
 
         species_sizes = statistics.get_species_sizes()
@@ -63,11 +67,22 @@ class Visualizer:
         plt.close()
 
     @staticmethod
-    def draw_net(config, genome, view=False, filename=None, node_names=None, show_disabled=True, prune_unused=False,
-                 node_colors=None, fmt='svg'):
-        """ Receives a genome and draws a neural network with arbitrary topology. """
+    def draw_net(
+        config,
+        genome,
+        view=False,
+        filename=None,
+        node_names=None,
+        show_disabled=True,
+        prune_unused=False,
+        node_colors=None,
+        fmt="svg",
+    ):
+        """Receives a genome and draws a neural network with arbitrary topology."""
         if graphviz is None:
-            warnings.warn("This display is not available due to a missing optional dependency (graphviz)")
+            warnings.warn(
+                "This display is not available due to a missing optional dependency (graphviz)"
+            )
             return
 
         if node_names is None:
@@ -81,10 +96,11 @@ class Visualizer:
         assert type(node_colors) is dict
 
         node_attrs = {
-            'shape': 'circle',
-            'fontsize': '9',
-            'height': '0.2',
-            'width': '0.2'}
+            "shape": "circle",
+            "fontsize": "9",
+            "height": "0.2",
+            "width": "0.2",
+        }
 
         dot = graphviz.Digraph(format=fmt, node_attr=node_attrs)
 
@@ -92,19 +108,24 @@ class Visualizer:
         for k in config.genome_config.input_keys:
             inputs.add(k)
             name = node_names.get(k, str(k))
-            input_attrs = {'style': 'filled', 'shape': 'box', 'fillcolor': node_colors.get(k, 'lightgray')}
+            input_attrs = {
+                "style": "filled",
+                "shape": "box",
+                "fillcolor": node_colors.get(k, "lightgray"),
+            }
             dot.node(name, _attributes=input_attrs)
 
         outputs = set()
         for k in config.genome_config.output_keys:
             outputs.add(k)
             name = node_names.get(k, str(k))
-            node_attrs_output = {'style': 'filled', 'fillcolor': node_colors.get(k, 'lightblue')}
+            node_attrs_output = {
+                "style": "filled",
+                "fillcolor": node_colors.get(k, "lightblue"),
+            }
             dot.node(name, _attributes=node_attrs_output)
 
-        # Si prune_unused es True, solo mostrar nodos que están conectados
         if prune_unused:
-            # Encontrar nodos que están en uso (tienen conexiones activas)
             used_nodes = set()
             for cg in genome.connections.values():
                 if cg.enabled:
@@ -113,32 +134,121 @@ class Visualizer:
         else:
             used_nodes = set(genome.nodes.keys())
 
-        # Dibujar nodos ocultos
         for n in used_nodes:
             if n in inputs or n in outputs:
                 continue
 
-            attrs = {'style': 'filled',
-                     'fillcolor': node_colors.get(n, 'white')}
+            attrs = {"style": "filled", "fillcolor": node_colors.get(n, "white")}
             dot.node(str(n), _attributes=attrs)
 
-        # Dibujar conexiones
         for cg in genome.connections.values():
             if cg.enabled or show_disabled:
                 input_node, output_node = cg.key
-                
-                # Si estamos podando y el nodo no está en uso, saltar
+
                 if prune_unused and not cg.enabled:
                     continue
-                    
+
                 a = node_names.get(input_node, str(input_node))
                 b = node_names.get(output_node, str(output_node))
-                style = 'solid' if cg.enabled else 'dotted'
-                color = 'green' if cg.weight > 0 else 'red'
+                style = "solid" if cg.enabled else "dotted"
+                color = "green" if cg.weight > 0 else "red"
                 width = str(0.1 + abs(cg.weight / 5.0))
-                dot.edge(a, b, _attributes={'style': style, 'color': color, 'penwidth': width})
+                dot.edge(
+                    a,
+                    b,
+                    _attributes={"style": style, "color": color, "penwidth": width},
+                )
 
         dot.render(filename, view=view)
 
         return dot
 
+    @staticmethod
+    def plot_trajectory(
+        results_path="validation_results.pkl",
+        view=False,
+        filename="trajectory.svg",
+    ):
+        """Plots the 2D trajectory from validation results."""
+        if plt is None:
+            warnings.warn(
+                "This display is not available due to a missing optional dependency (matplotlib)"
+            )
+            return
+
+        with open(results_path, "rb") as f:
+            results = pickle.load(f)
+
+        plt.figure()
+        target_pos = None
+
+        for result in results:
+            traj = result["trajectory"]
+            if not traj:
+                continue
+
+            # Extraer posiciones
+            positions = np.array(
+                [step["pos"] for step in traj if step["pos"][0] is not None]
+            )
+            if positions.size == 0:
+                continue
+
+            # Dibujar trayectoria
+            plt.plot(
+                positions[:, 0],
+                positions[:, 1],
+                marker="o",
+                markersize=2,
+                linestyle="-",
+                alpha=0.6,
+            )
+
+            # Punto de inicio
+            plt.plot(
+                positions[0, 0],
+                positions[0, 1],
+                "go",
+                markersize=8,
+                label="Start"
+                if "Start" not in plt.gca().get_legend_handles_labels()[1]
+                else "",
+            )
+
+            # Punto final
+            color = "bo" if result.get("reached", False) else "ro"
+            label = (
+                "End (Reached)" if result.get("reached", False) else "End (Not Reached)"
+            )
+            if label not in plt.gca().get_legend_handles_labels()[1]:
+                plt.plot(
+                    positions[-1, 0], positions[-1, 1], color, markersize=8, label=label
+                )
+            else:
+                plt.plot(positions[-1, 0], positions[-1, 1], color, markersize=8)
+
+            # Extraer posicion del target si no la tenemos
+            if target_pos is None and "target_position" in traj[0]:
+                target_pos = traj[0].get("target_position")
+
+        # Dibujar el objetivo (si se encontró)
+        if target_pos:
+            plt.plot(
+                target_pos[0],
+                target_pos[1],
+                "y*",
+                markersize=15,
+                label="Target",
+            )
+
+        plt.title("Agent Trajectory (2D Plane)")
+        plt.xlabel("X-coordinate")
+        plt.ylabel("Z-coordinate")
+        plt.grid(True)
+        plt.legend()
+        plt.axis("equal")
+
+        plt.savefig(filename)
+        if view:
+            plt.show()
+        plt.close()

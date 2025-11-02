@@ -13,11 +13,18 @@ os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(CKPT_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 
-# HYPERPARAMS (ajustables)
-POP_SIZE = 50
+
+# Final version
+# POP_SIZE = 100
+# GENERATIONS = 50
+# EPISODES_PER_GENOME = 3
+# MAX_STEPS = 100
+
+# Test rapido
+POP_SIZE = 20
 GENERATIONS = 5
-EPISODES_PER_GENOME = 2
-MAX_STEPS = 60
+EPISODES_PER_GENOME = 1
+MAX_STEPS = 40
 
 
 def evaluate_genomes(genomes, config):
@@ -104,6 +111,7 @@ def run(config_path):
     print("=" * 70)
 
     p = neat.Population(config)
+    # Stats generadas por NEAT
     p.add_reporter(neat.StdOutReporter(True))
     stats = neat.StatisticsReporter()
     p.add_reporter(stats)

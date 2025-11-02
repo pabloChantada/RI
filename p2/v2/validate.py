@@ -3,6 +3,11 @@ import pickle
 import neat
 import numpy as np
 from env import CustomEnv
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODELS_DIR = os.path.join(BASE_DIR, "models_neat")
+VISAL_PATH = os.path.join(MODELS_DIR, "validation_results.pkl")
 
 
 def load_genome(path):
@@ -10,7 +15,7 @@ def load_genome(path):
         return pickle.load(f)
 
 
-def validate(genome_path, config_path, episodes=10, max_steps=60, render=False):
+def validate(genome_path, config_path, episodes=5, max_steps=60, render=False):
     """
     Validation runner for an evolved NEAT genome (pure evolutionary policy).
     This version does NOT use reinforcement-learning or any AR fallback policy.
@@ -55,6 +60,9 @@ def validate(genome_path, config_path, episodes=10, max_steps=60, render=False):
                 ep_reward += reward
                 done = terminated or truncated
                 step += 1
+            print(
+                f"[INFO] Evaluated {ep + 1}/{episodes} episodes. Episode reward: {ep_reward:.2f} "
+            )
             results.append(
                 {
                     "episode": ep + 1,
@@ -68,16 +76,17 @@ def validate(genome_path, config_path, episodes=10, max_steps=60, render=False):
     finally:
         if env is not None:
             env.close()
-    with open("validation_results.pkl", "wb") as f:
+
+    with open(VISUAL_PATH, "wb") as f:
         pickle.dump(results, f)
     print("Validation finished. Results saved to validation_results.pkl")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--genome", required=True)
+    parser.add_argument("--genome", default="models_neat/winner_genome.pkl")
     parser.add_argument("--config", default="config.txt")
-    parser.add_argument("--episodes", type=int, default=10)
+    parser.add_argument("--episodes", type=int, default=5)
     parser.add_argument("--max_steps", type=int, default=60)
     args = parser.parse_args()
     validate(
