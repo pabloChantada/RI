@@ -25,6 +25,59 @@ def load_ar_model(path):
     return SAC.load(path)
 
 
+def adapt_observation_for_ar(obs_12d):
+    """
+    Adapta observación de 12 dimensiones (con IR) a 8 dimensiones (sin IR)
+    para compatibilidad con el modelo AR pre-entrenado.
+
+    Entrada (12 dims):
+        [agent_x, agent_z, target_x, target_z,
+         blob_visible, blob_x, blob_y, blob_size,
+         ir_front_c, ir_front_l, ir_front_r, ir_front_rr]
+
+    Salida (8 dims):
+        [agent_x, agent_z, target_x, target_z,
+         blob_visible, blob_x, blob_y, blob_size]
+
+    Args:
+        obs_12d: Observación de 12 dimensiones del ambiente
+
+    Returns:
+        np.ndarray: Observación de 8 dimensiones para AR
+    """
+    # Simplemente tomamos las primeras 8 dimensiones (sin los IR)
+    return obs_12d[:8].astype(np.float32)
+
+
+def should_use_ar_with_safety(obs_12d, blob_visible, ir_threshold=0.1):
+    """
+    Decide si usar AR basándose en blob visible Y seguridad de colisión.
+
+    Si hay un obstáculo muy cercano (IR > threshold), no usar AR incluso
+    si el blob es visible, para permitir que AE maneje la evasión.
+
+    Args:
+        obs_12d: Observación de 12 dimensiones
+        blob_visible: Si el blob es visible
+        ir_threshold: Umbral de proximidad peligrosa
+
+    Returns:
+        bool: True si es seguro usar AR
+    """
+    if not blob_visible:
+        return False
+
+    # Extraer sensores IR (dimensiones 8-11)
+    ir_sensors = obs_12d[8:12]
+    max_ir = np.max(ir_sensors)
+
+    # Si hay obstáculo cercano, no usar AR (dejar que AE evite)
+    if max_ir > ir_threshold:
+        return False
+
+    return True
+
+
 def validate(
     genome_path,
     config_path,
@@ -32,6 +85,7 @@ def validate(
     max_steps=100,
     policy_type="ae",
     ar_model_path=None,
+    use_safety_check=True,
 ):
     """
     Ejecuta la validación para un genoma NEAT (AE) o una política híbrida AE+AR.
@@ -39,6 +93,7 @@ def validate(
     Args:
         policy_type (str): 'ae' para política evolutiva pura, 'ae_ar' para híbrida.
         ar_model_path (str): Ruta al modelo AR (SAC) pre-entrenado, requerido para 'ae_ar'.
+        use_safety_check (bool): Si True, evita usar AR cuando hay obstáculos cercanos.
     """
     print("=" * 70)
     print("--- Iniciando Validación ---")
@@ -48,6 +103,7 @@ def validate(
     print(f"[CONFIG] Config NEAT: {config_path}")
     print(f"[CONFIG] Episodios: {episodes}")
     print(f"[CONFIG] Max steps: {max_steps}")
+    print(f"[CONFIG] Safety check: {use_safety_check}")
 
     ar_model = None
     if policy_type == "ae_ar":
@@ -58,6 +114,7 @@ def validate(
         print(f"[CONFIG] Modelo AR: {ar_model_path}")
         ar_model = load_ar_model(ar_model_path)
         print("[INFO] Modelo AR cargado correctamente")
+        print("[INFO] Wrapper de adaptación 12D->8D activado para AR")
 
     # Cargar modelo AE (NEAT)
     print(f"[INFO] Cargando genoma desde {genome_path}...")
@@ -79,8 +136,15 @@ def validate(
 
     results = []
     env = None
+
+    # Contadores de uso de políticas
+    ae_count = 0
+    ar_count = 0
+    ar_blocked_by_safety = 0
+
     try:
         env = CustomEnv(max_steps=max_steps, verbose=False)
+
         for ep in range(episodes):
             obs, info = env.reset()
             traj = []
@@ -94,28 +158,54 @@ def validate(
 
             while not done and step < max_steps:
                 blob_visible = info.get("blob_visible", False)
+                ir_sensors = info.get("ir_sensors", {})
+                max_ir = max(ir_sensors.values()) if ir_sensors else 0.0
 
-                # Selección de política
-                if policy_type == "ae_ar" and blob_visible:
-                    # Usar política AR cuando el blob es visible
-                    action, _ = ar_model.predict(obs, deterministic=True)
-                    policy_used = "AR"
+                # Selección de política con safety check
+                if policy_type == "ae_ar" and ar_model is not None:
+                    if use_safety_check:
+                        # Usar AR solo si es seguro (blob visible Y sin obstáculos)
+                        use_ar = should_use_ar_with_safety(obs, blob_visible)
+
+                        if blob_visible and not use_ar:
+                            ar_blocked_by_safety += 1
+                    else:
+                        # Sin safety check, usar AR siempre que blob sea visible
+                        use_ar = blob_visible
+
+                    if use_ar:
+                        # Adaptar observación de 12D a 8D para AR
+                        obs_8d = adapt_observation_for_ar(obs)
+                        action, _ = ar_model.predict(obs_8d, deterministic=True)
+                        policy_used = "AR"
+                        ar_count += 1
+                    else:
+                        # Usar política AE
+                        out = ae_net.activate(obs)
+                        action = np.clip(out, -1.0, 1.0)
+                        policy_used = "AE"
+                        ae_count += 1
                 else:
-                    # Usar política AE en caso contrario
+                    # Solo AE
                     out = ae_net.activate(obs)
                     action = np.clip(out, -1.0, 1.0)
                     policy_used = "AE"
+                    ae_count += 1
 
                 obs, reward, terminated, truncated, info = env.step(action)
 
                 # Logging
                 pos = info.get("agent_position", (None, None))
                 dist = info.get("distance", None)
+                near_obstacle = info.get("near_obstacle", False)
+
                 if step % 10 == 0:
+                    obstacle_warning = " ⚠️" if near_obstacle else ""
                     print(
                         f"  [STEP {step:3d}] Política={policy_used:2s} | "
                         f"BlobVisible={str(blob_visible):5s} | "
                         f"Distancia={dist:6.1f} | "
+                        f"MaxIR={max_ir:4.2f}{obstacle_warning} | "
                         f"Reward={reward:6.2f}"
                     )
 
@@ -125,6 +215,8 @@ def validate(
                         "distance": dist,
                         "blob": info.get("blob_visible", False),
                         "policy": policy_used,
+                        "near_obstacle": near_obstacle,
+                        "max_ir": max_ir,
                     }
                 )
 
@@ -141,6 +233,7 @@ def validate(
                     "reached": terminated,
                 }
             )
+
             print(f"\n[EPISODE {ep + 1}] Finalizado:")
             print(f"  - Objetivo alcanzado: {terminated}")
             print(f"  - Pasos totales: {step}")
@@ -168,10 +261,24 @@ def validate(
 
     print(f"[SUMMARY] Episodios completados: {episodes}")
     print(
-        f"[SUMMARY] Objetivos alcanzados: {total_reached}/{episodes} ({100 * total_reached / episodes:.1f}%)"
+        f"[SUMMARY] Objetivos alcanzados: {total_reached}/{episodes} "
+        f"({100 * total_reached / episodes:.1f}%)"
     )
     print(f"[SUMMARY] Recompensa promedio: {avg_reward:.2f}")
     print(f"[SUMMARY] Pasos promedio: {avg_steps:.1f}")
+
+    if policy_type == "ae_ar":
+        total_actions = ae_count + ar_count
+        print("\n[POLICY USAGE]")
+        print(
+            f"  - AE usada: {ae_count}/{total_actions} ({100 * ae_count / total_actions:.1f}%)"
+        )
+        print(
+            f"  - AR usada: {ar_count}/{total_actions} ({100 * ar_count / total_actions:.1f}%)"
+        )
+        if use_safety_check:
+            print(f"  - AR bloqueada por obstáculos: {ar_blocked_by_safety}")
+
     print("=" * 70 + "\n")
 
 
@@ -196,15 +303,20 @@ if __name__ == "__main__":
     parser.add_argument(
         "--policy_type",
         type=str,
-        default="ae-ar",
+        default="ae_ar",
         choices=["ae", "ae_ar"],
-        help="Tipo de política: 'ae' (solo evolutiva) o 'ae_ar' (híbrida).",
+        help="Tipo de política: 'ae' (solo evolutiva) o 'ae-ar'/'ae_ar' (híbrida).",
     )
     parser.add_argument(
         "--ar_model_path",
         type=str,
         default=SAC_MODEL_PATH,
         help="Ruta al modelo AR (SAC) pre-entrenado. Requerido si --policy_type es 'ae_ar'.",
+    )
+    parser.add_argument(
+        "--no-safety-check",
+        action="store_true",
+        help="Desactiva el safety check (usa AR incluso cerca de obstáculos).",
     )
 
     args = parser.parse_args()
@@ -229,4 +341,5 @@ if __name__ == "__main__":
         max_steps=args.max_steps,
         policy_type=args.policy_type,
         ar_model_path=args.ar_model_path,
+        use_safety_check=not args.no_safety_check,
     )

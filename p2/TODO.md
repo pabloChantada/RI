@@ -1,0 +1,1 @@
+- Añadir comportamiento anti-choque, sino en la evaluacion ae-ar no funciona; ya que el ar tiene  comportamiento anti-choque

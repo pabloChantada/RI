@@ -5,12 +5,22 @@ from robobopy.Robobo import Robobo
 from robobosim.RoboboSim import RoboboSim
 import time
 from robobopy.utils.BlobColor import BlobColor
+from robobopy.utils.IR import IR
 
 
 class CustomEnv(gym.Env):
     """
     Square environment for red cylinder search using Gymnasium structure.
-    Observation space (8 dims) and action space (2 dims) as before.
+
+    Observation space (12 dims):
+        - Agent position (x, z): [-1, 1]
+        - Target position (x, z): [-1, 1]
+        - Blob visible: {0, 1}
+        - Blob position (x, y): [-1, 1]
+        - Blob size: [0, 1]
+        - IR sensors (4): [0, 1] (FrontC, FrontL, FrontR, FrontRR)
+
+    Action space (2 dims): Continuous wheel velocities [-1, 1]
     """
 
     metadata = {"render.modes": ["human"]}
@@ -40,6 +50,10 @@ class CustomEnv(gym.Env):
 
         # Goal reached threshold
         self.goal_threshold = 150.0
+
+        # Collision avoidance threshold
+        self.collision_threshold = 0.3  # Normalized IR value
+
         self.robobo = Robobo(sim_host)
         self.robobo.connect()
         self.sim = RoboboSim(sim_host)
@@ -62,14 +76,22 @@ class CustomEnv(gym.Env):
         except Exception:
             self._object_id = None
 
-        # OBSERVATION AND ACTION SPACES
+        # OBSERVATION SPACE: 12 dimensions (8 vision + 4 IR sensors)
+        # [agent_x, agent_z, target_x, target_z,
+        #  blob_visible, blob_x, blob_y, blob_size,
+        #  ir_front_c, ir_front_l, ir_front_r, ir_front_rr]
         self.observation_space = gym.spaces.Box(
             low=np.array(
-                [-1.0, -1.0, -1.0, -1.0, 0.0, -1.0, -1.0, 0.0], dtype=np.float32
+                [-1.0, -1.0, -1.0, -1.0, 0.0, -1.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                dtype=np.float32,
             ),
-            high=np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], dtype=np.float32),
+            high=np.array(
+                [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+                dtype=np.float32,
+            ),
             dtype=np.float32,
         )
+
         self.action_space = gym.spaces.Box(
             low=-1.0, high=1.0, shape=(2,), dtype=np.float32
         )
@@ -90,6 +112,76 @@ class CustomEnv(gym.Env):
             time.sleep(0.2)
         except Exception:
             pass
+
+    def _get_ir_sensors(self):
+        """
+        Read and normalize IR sensor values for collision avoidance.
+
+        IMPORTANT: Robobo IR sensors work inversely:
+        - Low raw value = close obstacle (DANGER)
+        - High raw value = far away or no obstacle (SAFE)
+
+        We normalize to:
+        - 0.0 = safe (far/no obstacle)
+        - 1.0 = danger (very close obstacle)
+
+        Returns:
+            dict: Normalized IR sensor readings [0, 1]
+                  0 = no obstacle, 1 = very close obstacle
+        """
+        try:
+            # Read IR sensors (range typically 0-1000+)
+            # Higher values = further away
+            ir_front_c = self.robobo.readIRSensor(IR.FrontC)
+            ir_front_l = self.robobo.readIRSensor(IR.FrontL)
+            ir_front_r = self.robobo.readIRSensor(IR.FrontR)
+            ir_front_rr = self.robobo.readIRSensor(IR.FrontRR)
+
+            if self.verbose:
+                print(
+                    f"[IR RAW] C={ir_front_c:.1f}, L={ir_front_l:.1f}, "
+                    f"R={ir_front_r:.1f}, RR={ir_front_rr:.1f}"
+                )
+
+            # Define thresholds
+            # If IR > safe_distance, consider it safe (normalize to 0)
+            # If IR < danger_distance, consider it dangerous (normalize to 1)
+            safe_distance = 100.0  # Above this = safe (no obstacle)
+            danger_distance = 10.0  # Below this = very dangerous
+
+            def normalize_ir(raw_value):
+                """
+                Normalize IR sensor reading inversely.
+                High raw value (far) -> 0.0 (safe)
+                Low raw value (close) -> 1.0 (danger)
+                """
+                if raw_value >= safe_distance:
+                    return 0.0  # Safe, no obstacle
+                elif raw_value <= danger_distance:
+                    return 1.0  # Danger, very close
+                else:
+                    # Linear interpolation between danger and safe
+                    # Invert: as raw increases, normalized decreases
+                    normalized = 1.0 - (raw_value - danger_distance) / (
+                        safe_distance - danger_distance
+                    )
+                    return float(np.clip(normalized, 0.0, 1.0))
+
+            return {
+                "front_c": normalize_ir(ir_front_c),
+                "front_l": normalize_ir(ir_front_l),
+                "front_r": normalize_ir(ir_front_r),
+                "front_rr": normalize_ir(ir_front_rr),
+            }
+        except Exception as e:
+            if self.verbose:
+                print(f"Error reading IR sensors: {e}")
+            return {
+                "front_c": 0.0,
+                "front_l": 0.0,
+                "front_r": 0.0,
+                "front_rr": 0.0,
+            }
 
     def _get_blob_info(self):
         """Return dict: visible (0/1), x,y (0-100), size (>=0). Handles exceptions."""
@@ -141,9 +233,16 @@ class CustomEnv(gym.Env):
             return 0.0, 0.0
 
     def _get_obs(self):
+        """
+        Generate current normalized observation with IR sensors.
+
+        Returns:
+            np.ndarray: Normalized observation vector (12 dimensions)
+        """
         agent_x, agent_z = self._get_agent_position()
         target_x, target_z = self._get_object_position()
         blob_info = self._get_blob_info()
+        ir_sensors = self._get_ir_sensors()
 
         agent_x_norm = np.clip(agent_x / 1000.0, -1.0, 1.0)
         agent_z_norm = np.clip(agent_z / 1000.0, -1.0, 1.0)
@@ -163,6 +262,10 @@ class CustomEnv(gym.Env):
                 blob_x_norm,
                 blob_y_norm,
                 blob_size_norm,
+                ir_sensors["front_c"],
+                ir_sensors["front_l"],
+                ir_sensors["front_r"],
+                ir_sensors["front_rr"],
             ],
             dtype=np.float32,
         )
@@ -171,7 +274,9 @@ class CustomEnv(gym.Env):
         agent_x, agent_z = self._get_agent_position()
         target_x, target_z = self._get_object_position()
         blob_info = self._get_blob_info()
+        ir_sensors = self._get_ir_sensors()
         distance = np.sqrt((agent_x - target_x) ** 2 + (agent_z - target_z) ** 2)
+
         return {
             "distance": distance,
             "agent_position": (agent_x, agent_z),
@@ -180,6 +285,8 @@ class CustomEnv(gym.Env):
             "blob_visible": bool(blob_info["visible"]),
             "blob_centered": self._is_blob_centered(blob_info),
             "blob_size": blob_info["size"],
+            "ir_sensors": ir_sensors,
+            "near_obstacle": max(ir_sensors.values()) > self.collision_threshold,
         }
 
     def _is_blob_centered(self, blob_info, margin=15):
@@ -187,11 +294,26 @@ class CustomEnv(gym.Env):
             return False
         return abs(blob_info["x"] - 50.0) < margin
 
-    def _calculate_reward(self, current_distance, blob_info):
+    def _calculate_reward(self, current_distance, blob_info, ir_sensors):
+        """
+        Calculate reward based on distance, vision, and collision avoidance.
+
+        Args:
+            current_distance: Current distance to target
+            blob_info: Detected blob information
+            ir_sensors: IR sensor readings
+
+        Returns:
+            float: Total reward
+        """
         reward = 0.0
+
+        # 1. Reward for distance improvement
         if self.previous_distance is not None:
             distance_improvement = self.previous_distance - current_distance
             reward += distance_improvement * 0.05
+
+        # 2. Reward for blob visibility
         if blob_info["visible"] == 1.0:
             reward += 0.2
             distance_from_center = abs(blob_info["x"] - 50.0)
@@ -201,8 +323,23 @@ class CustomEnv(gym.Env):
             reward += size_reward
         else:
             reward -= 0.15
+
+        # 3. Penalty for being too close to obstacles (collision avoidance)
+        max_ir = max(ir_sensors.values())
+        if max_ir > self.collision_threshold:
+            # Penalty proportional to proximity
+            collision_penalty = (max_ir - self.collision_threshold) * 0.5
+            reward -= collision_penalty
+
+            if self.verbose:
+                print(
+                    f"  [WARNING] Near obstacle! Max IR: {max_ir:.2f}, Penalty: -{collision_penalty:.2f}"
+                )
+
+        # 4. Large reward for reaching goal
         if current_distance < self.goal_threshold:
             reward += 10.0
+
         return reward
 
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
@@ -247,12 +384,18 @@ class CustomEnv(gym.Env):
         info = self._get_info()
         current_distance = info["distance"]
         blob_info = self._get_blob_info()
-        reward = self._calculate_reward(current_distance, blob_info)
+        ir_sensors = self._get_ir_sensors()
+
+        reward = self._calculate_reward(current_distance, blob_info, ir_sensors)
         terminated = current_distance < self.goal_threshold
         truncated = self.current_step >= self.max_steps
+
         if self.verbose and (self.current_step % 10 == 0 or terminated):
+            obstacle_warning = " [NEAR OBSTACLE!]" if info["near_obstacle"] else ""
             print(
-                f"Step {self.current_step}/{self.max_steps} | L={left_vel:.2f} R={right_vel:.2f} | Dist={current_distance:.1f} | Blob={int(blob_info['visible'])} | R={reward:.2f}"
+                f"Step {self.current_step}/{self.max_steps} | L={left_vel:.2f} R={right_vel:.2f} | "
+                f"Dist={current_distance:.1f} | Blob={int(blob_info['visible'])} | "
+                f"IR_max={max(ir_sensors.values()):.2f} | R={reward:.2f}{obstacle_warning}"
             )
         self.previous_distance = current_distance
         return observation, reward, terminated, truncated, info

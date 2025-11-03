@@ -15,7 +15,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 
 POP_SIZE = 30
-GENERATIONS = 30
+GENERATIONS = 10
 EPISODES_PER_GENOME = 2
 MAX_STEPS = 30
 
