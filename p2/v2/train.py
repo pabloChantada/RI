@@ -14,18 +14,10 @@ os.makedirs(CKPT_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 
 
-# Final version
-POP_SIZE = 100
-GENERATIONS = 30
-EPISODES_PER_GENOME = 3
-MAX_STEPS = 50
-
-# Test rapido
-# POP_SIZE = 20
-# GENERATIONS = 5
-# EPISODES_PER_GENOME = 1
-# MAX_STEPS = 40
-#
+POP_SIZE = 30
+GENERATIONS = 15
+EPISODES_PER_GENOME = 2
+MAX_STEPS = 40
 
 
 def evaluate_genomes(genomes, config):

@@ -14,7 +14,7 @@ os.makedirs(CKPT_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 
 
-POP_SIZE = 50
+POP_SIZE = 30
 GENERATIONS = 30
 EPISODES_PER_GENOME = 2
 MAX_STEPS = 30
