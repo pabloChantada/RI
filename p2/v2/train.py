@@ -15,16 +15,17 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 
 # Final version
-# POP_SIZE = 100
-# GENERATIONS = 50
-# EPISODES_PER_GENOME = 3
-# MAX_STEPS = 100
+POP_SIZE = 100
+GENERATIONS = 30
+EPISODES_PER_GENOME = 3
+MAX_STEPS = 50
 
 # Test rapido
-POP_SIZE = 20
-GENERATIONS = 5
-EPISODES_PER_GENOME = 1
-MAX_STEPS = 40
+# POP_SIZE = 20
+# GENERATIONS = 5
+# EPISODES_PER_GENOME = 1
+# MAX_STEPS = 40
+#
 
 
 def evaluate_genomes(genomes, config):
@@ -108,6 +109,7 @@ def run(config_path):
     print(f"[CONFIG] Max steps per episode: {MAX_STEPS}")
     print(f"[CONFIG] Number of inputs: {config.genome_config.num_inputs}")
     print(f"[CONFIG] Number of outputs: {config.genome_config.num_outputs}")
+    print(f"[CONFIG] Total steps: {POP_SIZE * EPISODES_PER_GENOME * GENERATIONS}")
     print("=" * 70)
 
     p = neat.Population(config)

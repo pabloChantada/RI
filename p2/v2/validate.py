@@ -7,7 +7,7 @@ import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(BASE_DIR, "models_neat")
-VISAL_PATH = os.path.join(MODELS_DIR, "validation_results.pkl")
+VISUAL_PATH = os.path.join(MODELS_DIR, "validation_results.pkl")
 
 
 def load_genome(path):
