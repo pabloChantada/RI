@@ -15,9 +15,9 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 
 POP_SIZE = 50
-GENERATIONS = 30
+GENERATIONS = 40
 EPISODES_PER_GENOME = 1
-MAX_STEPS = 100
+MAX_STEPS = 75
 
 
 def evaluate_genomes(genomes, config):
