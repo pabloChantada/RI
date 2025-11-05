@@ -46,8 +46,8 @@ class CustomEnv(gym.Env):
         self.sim.connect()
 
         # Default start position
-        # self.default_start = {"x": -1000.0, "y": 39.0, "z": -400.0}
-        # self.sim.setRobotLocation(0, self.default_start)
+        self.default_start = {"x": -1000.0, "y": 39.0, "z": -400.0}
+        self.sim.setRobotLocation(0, self.default_start)
 
         # Configure blob detection (RED only)
         self.robobo.setActiveBlobs(True, False, False, False)
@@ -218,7 +218,7 @@ class CustomEnv(gym.Env):
             pass
         self._setup_camera()
         # Change robot starting position
-        # self.sim.setRobotLocation(0, self.default_start)
+        self.sim.setRobotLocation(0, self.default_start)
         self.current_step = 0
         info = self._get_info()
         self.initial_distance = info["distance"]

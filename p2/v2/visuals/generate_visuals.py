@@ -4,7 +4,7 @@ import neat
 import argparse
 from visualize import Visualizer
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.abspath(os.path.join(__file__, "..", "..")))
 MODELS_DIR = os.path.join(BASE_DIR, "models_neat")
 VIS_DIR = os.path.join(BASE_DIR, "visuals_neat")
 
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--results",
-        default=os.path.join(MODELS_DIR, "validation_results.pkl"),
+        default="validation_results.pkl",
         help="Path to the validation results file (from validate.py).",
     )
     parser.add_argument(

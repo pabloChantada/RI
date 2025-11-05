@@ -4,7 +4,7 @@ import neat
 import argparse
 from visualize import Visualizer
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.abspath(os.path.join(__file__, "..", "..")))
 MODELS_DIR = os.path.join(BASE_DIR, "models_neat")
 VIS_DIR = os.path.join(BASE_DIR, "visuals_neat")
 

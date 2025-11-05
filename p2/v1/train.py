@@ -14,10 +14,10 @@ os.makedirs(CKPT_DIR, exist_ok=True)
 os.makedirs(LOG_DIR, exist_ok=True)
 
 
-POP_SIZE = 30
-GENERATIONS = 15
-EPISODES_PER_GENOME = 2
-MAX_STEPS = 40
+POP_SIZE = 50
+GENERATIONS = 30
+EPISODES_PER_GENOME = 1
+MAX_STEPS = 100
 
 
 def evaluate_genomes(genomes, config):
@@ -70,6 +70,44 @@ def evaluate_genomes(genomes, config):
         )
 
 
+class SimpleCheckpointer(neat.reporting.BaseReporter):
+    """
+    Minimal checkpointer that avoids pickling the NEAT Config object (which may
+    include non-picklable items like itertools.count). We only save the data
+    necessary to resume: generation, population, and species. This mirrors the
+    default Checkpointer but excludes the Config object to avoid the
+    'cannot pickle itertools.count' error.
+    """
+
+    def __init__(self, generation_interval=1, filename_prefix="neat-checkpoint-"):
+        self.generation_interval = generation_interval
+        self.filename_prefix = filename_prefix
+        self.current_generation = 0
+
+    def start_generation(self, generation):
+        self.current_generation = generation
+
+    def end_generation(self, config, population, species_set):
+        if (self.current_generation + 1) % self.generation_interval != 0:
+            return
+        filename = f"{self.filename_prefix}{self.current_generation}"
+        path = os.path.join(CKPT_DIR, filename)
+        data = {
+            "generation": self.current_generation,
+            # population is a dict of genomes; it's safe to pickle genomes themselves
+            # but avoid including the full config object.
+            "population": population,
+            # species_set may contain references to genomes; include it as-is
+            "species_set": species_set,
+        }
+        try:
+            with open(path, "wb") as f:
+                pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
+            print(f"[CHECKPOINT] Saved simple checkpoint to {path}")
+        except Exception as e:
+            print(f"[CHECKPOINT ERROR] Failed to save checkpoint: {e}")
+
+
 def run(config_path):
     print("=" * 70)
     print("[INFO] Starting NEAT Training")
@@ -87,15 +125,7 @@ def run(config_path):
         config_path,
     )
 
-    # Asegurarnos de que pop_size viene del config si está definido
-    try:
-        POP = int(config.pop_size)
-    except Exception:
-        POP = POP_SIZE
-
-    config.pop_size = POP
-
-    print(f"[CONFIG] Population size: {POP}")
+    print(f"[CONFIG] Population size: {POP_SIZE}")
     print(f"[CONFIG] Generations: {GENERATIONS}")
     print(f"[CONFIG] Episodes per genome: {EPISODES_PER_GENOME}")
     print(f"[CONFIG] Max steps per episode: {MAX_STEPS}")
@@ -109,11 +139,11 @@ def run(config_path):
     p.add_reporter(neat.StdOutReporter(True))
     stats = neat.StatisticsReporter()
     p.add_reporter(stats)
+
+    # Replace the default Checkpointer (which pickles the full config and may fail)
+    # with our SimpleCheckpointer that does not attempt to pickle the Config object.
     p.add_reporter(
-        neat.Checkpointer(
-            generation_interval=5,
-            filename_prefix=os.path.join(CKPT_DIR, "neat-checkpoint-"),
-        )
+        SimpleCheckpointer(generation_interval=5, filename_prefix="neat-checkpoint-")
     )
 
     print("\n[INFO] Starting evolution...")
