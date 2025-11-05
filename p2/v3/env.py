@@ -301,14 +301,14 @@ class CustomEnv(gym.Env):
         if self.previous_distance is not None:
             distance_improvement = self.previous_distance - current_distance
             reward += (
-                distance_improvement * 0.1
+                distance_improvement * 0.3
             )  # Aumenta incremento por mejora en distancia
 
         # Recompensa por visibilidad del blob
         if blob_info["visible"] == 1.0:
-            reward += 0.5  # Mayor incentivo para mantener el objetivo visible
+            reward += 2.5  # Mayor incentivo para mantener el objetivo visible
             distance_from_center = abs(blob_info["x"] - 50.0)
-            centering_reward = 0.3 * (1.0 - min(distance_from_center / 50.0, 1.0))
+            centering_reward = 0.8 * (1.0 - min(distance_from_center / 50.0, 1.0))
             reward += centering_reward
 
         # Penalización significativa por colisiones
@@ -318,7 +318,7 @@ class CustomEnv(gym.Env):
 
         # Premio alto si llega al objetivo (goal threshold)
         if current_distance < self.goal_threshold:
-            reward += 15.0  # Amplificar recompensa por alcanzar el objetivo
+            reward += 50.0  # Amplificar recompensa por alcanzar el objetivo
 
         return reward
 
@@ -368,7 +368,7 @@ class CustomEnv(gym.Env):
 
         reward = self._calculate_reward(current_distance, blob_info, ir_sensors)
         # Small step penalty to encourage efficiency
-        reward -= 0.1
+        reward -= 0.05
         terminated = current_distance < self.goal_threshold
         truncated = self.current_step >= self.max_steps
 

@@ -1,6 +1,6 @@
 [NEAT]
 # Population size
-pop_size           = 50
+pop_size           = 50 
 fitness_criterion  = max
 fitness_threshold  = 200.0
 reset_on_extinction = True
@@ -15,21 +15,21 @@ feed_forward       = True
 
 # Compatibility
 compatibility_disjoint_coefficient = 1.0
-compatibility_weight_coefficient   = 0.5
+compatibility_weight_coefficient   = 0.6  
 
 # Activation / aggregation
 activation_default      = tanh
-activation_mutate_rate  = 0.2
-activation_options      = tanh, relu
+activation_mutate_rate  = 0.0
+activation_options      = tanh, sigmoid, relu, identity
 aggregation_default     = sum
 aggregation_mutate_rate = 0.0
 aggregation_options     = sum
 
-# Mutation probabilities (tune as needed)
-node_add_prob       = 0.1
-node_delete_prob    = 0.05
-conn_add_prob       = 0.5
-conn_delete_prob    = 0.2
+# Mutation probabilities
+node_add_prob       = 0.05
+node_delete_prob    = 0.02
+conn_add_prob       = 0.3
+conn_delete_prob    = 0.1
 
 # Connection enable
 enabled_default     = True
@@ -63,14 +63,15 @@ weight_mutate_rate  = 0.9
 weight_replace_rate = 0.1
 
 [DefaultSpeciesSet]
-compatibility_threshold = 1.5
+# VALOR CORREGIDO Y REDUCIDO
+compatibility_threshold = 1.75
 
 [DefaultStagnation]
 species_fitness_func = max
-max_stagnation       = 15
+max_stagnation       = 12
 species_elitism      = 2
 
 [DefaultReproduction]
-elitism            = 3
-survival_threshold = 0.3
+elitism            = 2
+survival_threshold = 0.2
 

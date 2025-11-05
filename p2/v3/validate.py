@@ -128,11 +128,22 @@ def validate(
             print(f"{'=' * 70}")
 
             while not done and step < max_steps:
-                blob_visible = info.get("blob_visible", False)
-                ir_sensors = info.get("ir_sensors", {})
-                max_ir = max(ir_sensors.values()) if ir_sensors else 0.0
+                blob_centered = info.get("blob_centered", False)
+                near_obstacle = info.get("near_obstacle", False)
 
-                if ar_model is not None and blob_visible:
+                # Lógica de decisión de política para AE+AR
+                use_ar = False
+                if policy_type == "ae_ar" and ar_model is not None:
+                    # Condición 1: El blob debe estar centrado para considerar usar AR
+                    if blob_centered:
+                        # Condición 2 (Safety Check): No usar AR si hay un obstáculo cerca
+                        if use_safety_check and near_obstacle:
+                            use_ar = False
+                            ar_blocked_by_safety += 1
+                        else:
+                            use_ar = True
+
+                if use_ar:
                     obs_8d = adapt_observation_for_ar(obs)
                     action, _ = ar_model.predict(obs_8d, deterministic=True)
                     policy_used = "AR"
@@ -149,12 +160,17 @@ def validate(
                 pos = info.get("agent_position", (None, None))
                 dist = info.get("distance", None)
                 near_obstacle = info.get("near_obstacle", False)
+                max_ir = (
+                    max(info.get("ir_sensors", {}).values())
+                    if info.get("ir_sensors")
+                    else 0.0
+                )
 
                 if step % 10 == 0:
                     obstacle_warning = "!" if near_obstacle else ""
                     print(
                         f"  [STEP {step:3d}] Política={policy_used:2s} | "
-                        f"BlobVisible={str(blob_visible):5s} | "
+                        f"BlobCentered={str(blob_centered):5s} | "
                         f"Distancia={dist:6.1f} | "
                         f"MaxIR={max_ir:4.2f}{obstacle_warning} | "
                         f"Reward={reward:6.2f}"
@@ -218,7 +234,7 @@ def validate(
     print(f"[SUMMARY] Recompensa promedio: {avg_reward:.2f}")
     print(f"[SUMMARY] Pasos promedio: {avg_steps:.1f}")
 
-    if policy_type == "ae_ar":
+    if policy_type == "ae_ar" and (ae_count + ar_count > 0):
         total_actions = ae_count + ar_count
         print("\n[POLICY USAGE]")
         print(
@@ -256,7 +272,7 @@ if __name__ == "__main__":
         type=str,
         default="ae_ar",
         choices=["ae", "ae_ar"],
-        help="Tipo de política: 'ae' (solo evolutiva) o 'ae-ar'/'ae_ar' (híbrida).",
+        help="Tipo de política: 'ae' (solo evolutiva) o 'ae_ar' (híbrida).",
     )
     parser.add_argument(
         "--ar_model_path",
