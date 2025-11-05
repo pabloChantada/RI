@@ -49,35 +49,6 @@ def adapt_observation_for_ar(obs_12d):
     return obs_12d[:8].astype(np.float32)
 
 
-def should_use_ar_with_safety(obs_12d, blob_visible, ir_threshold=0.1):
-    """
-    Decide si usar AR basándose en blob visible Y seguridad de colisión.
-
-    Si hay un obstáculo muy cercano (IR > threshold), no usar AR incluso
-    si el blob es visible, para permitir que AE maneje la evasión.
-
-    Args:
-        obs_12d: Observación de 12 dimensiones
-        blob_visible: Si el blob es visible
-        ir_threshold: Umbral de proximidad peligrosa
-
-    Returns:
-        bool: True si es seguro usar AR
-    """
-    if not blob_visible:
-        return False
-
-    # Extraer sensores IR (dimensiones 8-11)
-    ir_sensors = obs_12d[8:12]
-    max_ir = np.max(ir_sensors)
-
-    # Si hay obstáculo cercano, no usar AR (dejar que AE evite)
-    if max_ir > ir_threshold:
-        return False
-
-    return True
-
-
 def validate(
     genome_path,
     config_path,
@@ -161,32 +132,12 @@ def validate(
                 ir_sensors = info.get("ir_sensors", {})
                 max_ir = max(ir_sensors.values()) if ir_sensors else 0.0
 
-                # Selección de política con safety check
-                if policy_type == "ae_ar" and ar_model is not None:
-                    if use_safety_check:
-                        # Usar AR solo si es seguro (blob visible Y sin obstáculos)
-                        use_ar = should_use_ar_with_safety(obs, blob_visible)
-
-                        if blob_visible and not use_ar:
-                            ar_blocked_by_safety += 1
-                    else:
-                        # Sin safety check, usar AR siempre que blob sea visible
-                        use_ar = blob_visible
-
-                    if use_ar:
-                        # Adaptar observación de 12D a 8D para AR
-                        obs_8d = adapt_observation_for_ar(obs)
-                        action, _ = ar_model.predict(obs_8d, deterministic=True)
-                        policy_used = "AR"
-                        ar_count += 1
-                    else:
-                        # Usar política AE
-                        out = ae_net.activate(obs)
-                        action = np.clip(out, -1.0, 1.0)
-                        policy_used = "AE"
-                        ae_count += 1
+                if ar_model is not None and blob_visible:
+                    obs_8d = adapt_observation_for_ar(obs)
+                    action, _ = ar_model.predict(obs_8d, deterministic=True)
+                    policy_used = "AR"
+                    ar_count += 1
                 else:
-                    # Solo AE
                     out = ae_net.activate(obs)
                     action = np.clip(out, -1.0, 1.0)
                     policy_used = "AE"
@@ -200,7 +151,7 @@ def validate(
                 near_obstacle = info.get("near_obstacle", False)
 
                 if step % 10 == 0:
-                    obstacle_warning = " ⚠️" if near_obstacle else ""
+                    obstacle_warning = "!" if near_obstacle else ""
                     print(
                         f"  [STEP {step:3d}] Política={policy_used:2s} | "
                         f"BlobVisible={str(blob_visible):5s} | "

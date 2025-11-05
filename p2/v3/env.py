@@ -314,8 +314,7 @@ class CustomEnv(gym.Env):
         # Penalización significativa por colisiones
         max_ir = max(ir_sensors.values())
         if max_ir > self.collision_threshold:
-            collision_penalty = (max_ir - self.collision_threshold) * 0.8
-            reward -= collision_penalty
+            reward -= 10.0
 
         # Premio alto si llega al objetivo (goal threshold)
         if current_distance < self.goal_threshold:
@@ -368,6 +367,8 @@ class CustomEnv(gym.Env):
         ir_sensors = self._get_ir_sensors()
 
         reward = self._calculate_reward(current_distance, blob_info, ir_sensors)
+        # Small step penalty to encourage efficiency
+        reward -= 0.1
         terminated = current_distance < self.goal_threshold
         truncated = self.current_step >= self.max_steps
 

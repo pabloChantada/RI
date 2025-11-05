@@ -1,6 +1,6 @@
 [NEAT]
 # Population size
-pop_size           = 30
+pop_size           = 50
 fitness_criterion  = max
 fitness_threshold  = 200.0
 reset_on_extinction = True
@@ -19,7 +19,7 @@ compatibility_weight_coefficient   = 0.5
 
 # Activation / aggregation
 activation_default      = tanh
-activation_mutate_rate  = 0.0
+activation_mutate_rate  = 0.2
 activation_options      = tanh, relu
 aggregation_default     = sum
 aggregation_mutate_rate = 0.0
