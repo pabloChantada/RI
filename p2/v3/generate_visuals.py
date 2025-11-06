@@ -111,7 +111,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--results",
-        default="validation_results.pkl",
+        default=os.path.join(MODELS_DIR, "validation_results.pkl"),
         help="Path to the validation results file (from validate.py).",
     )
     parser.add_argument(

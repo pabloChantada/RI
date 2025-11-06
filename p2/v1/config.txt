@@ -1,8 +1,8 @@
 [NEAT]
 # Population size
-pop_size           = 50 
+pop_size           = 20 
 fitness_criterion  = max
-fitness_threshold  = 200.0
+fitness_threshold  = 150.0
 reset_on_extinction = True
 
 [DefaultGenome]

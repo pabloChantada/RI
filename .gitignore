@@ -205,8 +205,11 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+
 rob_env/
-.DS_Store/
+*/.DS_Store
 runs/
 checkpoints/
 p1/models/sac_cylinder_phase1.zip
@@ -219,6 +222,8 @@ p1.zip
 p2/v1/checkpoints_neat/
 p2/v2/checkpoints_neat/
 p2/v3/checkpoints_neat/
-
+p2/v1/logs_neat/
+p2/v2/logs_neat/
+p2/v3/logs_neat/
 
 
