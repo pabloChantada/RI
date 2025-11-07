@@ -9,7 +9,7 @@ from stable_baselines3 import SAC
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODELS_DIR = os.path.join(BASE_DIR, "models_neat")
 VISAL_PATH = os.path.join(MODELS_DIR, "validation_results.pkl")
-SAC_MODEL_PATH = os.path.join(BASE_DIR, "sac_cylinder_final.zip")
+SAC_MODEL_PATH = os.path.join(MODELS_DIR, "sac_cylinder_final.zip")
 DEFAULT_GENOME_PATH = os.path.join(MODELS_DIR, "winner_genome.pkl")
 DEFAULT_CONFIG_PATH = os.path.join(BASE_DIR, "config.txt")
 
