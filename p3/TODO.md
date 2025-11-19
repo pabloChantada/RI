@@ -10,4 +10,4 @@ Resulta que deberíamos tener una estructura modular y que funcione (ya sería t
 Ostia, esto es para el 30 lo acabo de mirar, estamos un poco coocked la vdd
 Mecagoen deberíamos haber empezado antes aaaaaaaaaaaaaa bueno laura tranquila vamos a calmarnos
 Intentarás echarme la culpa supongo, pero ayer hiciste 14 horas de APAAD pa que la retrasaran así que el pringui aquí eres tú eh
-Supongo también que no habrás leído en vertical la primera letra de cada frase
+Supongo también que no habrás leído en vertical la primera letra de cada frases
