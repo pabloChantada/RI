@@ -1,0 +1,5 @@
+from main import rl_only_demo
+
+
+if __name__ == "__main__":
+    rl_only_demo()
