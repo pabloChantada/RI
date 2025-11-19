@@ -1,4 +1,5 @@
-# main.py
+
+######################################################### SCRIPT PRINCIPAL #####################################################################
 
 import time
 
@@ -12,8 +13,11 @@ from teleop_controller import infer_gesture_from_keypoints, gesture_to_command
 from rl_policy import load_policy
 
 
+### TELEOPERACIÓN ###
+
 def teleop_and_rl_demo():
     """
+
     Flujo principal:
     1) Teleoperación por postura hasta detectar objeto y hacer >= MIN_TELEOP_ACTIONS
     2) Pasar a política de refuerzo para aproximarse al objeto
@@ -95,6 +99,7 @@ def teleop_and_rl_demo():
 
 
 # Versión solo RL para usar desde test.py
+
 def rl_only_demo():
     """
     Ejecuta sólo la parte de RL (sin teleoperación).

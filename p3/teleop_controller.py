@@ -1,4 +1,8 @@
+
+######################################################### CONTROL DE TELEOPERADOR #####################################################################
+
 # bua esto ns que es exactamente eh
+# en plan me refiero a partes del script, creo que deberíamos cambiarlas (aunque le he preguntado a chati por el código original y ha dicho que no :I)
 
 from typing import Optional
 
@@ -30,8 +34,8 @@ Indices de keypoints en YOLO11/YOLOv8 pose (COCO, 17 puntos) :contentReference[o
 
 def infer_gesture_from_keypoints(
     keypoints_xy: Optional[np.ndarray],
-    frame_shape,
-) -> str:
+    frame_shape, ) -> str:
+    
     """
     Recibe los puntos clave de la primera persona (17,2) y decide un gesto:
 
@@ -39,6 +43,7 @@ def infer_gesture_from_keypoints(
 
     Si no se ve persona o faltan puntos clave, devuelve "STOP".
     """
+
     if keypoints_xy is None:
         return "STOP"
 
@@ -58,11 +63,11 @@ def infer_gesture_from_keypoints(
     if np.all(l_shoulder == 0) or np.all(r_shoulder == 0):
         return "STOP"
 
-    # Márgenes relativos para no ser ultra-sensible
+    # Márgenes relativos (no hipersensible)
     margin_y = 0.05 * h
     margin_x = 0.05 * w
 
-    # Medias hombros/caderas
+    # Medias hombros/caderas (wtf esto lo copié directamente hay que cambiarlo)
     shoulder_y = (l_shoulder[1] + r_shoulder[1]) / 2.0
     hip_y = (l_hip[1] + r_hip[1]) / 2.0
 

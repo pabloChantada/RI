@@ -1,4 +1,5 @@
-# vision.py
+
+######################################################### VISIÓN #####################################################################
 
 from typing import Optional, Tuple
 
@@ -10,6 +11,7 @@ import config
 
 class VisionSystem:
     """
+
     Wrapper de YOLO pose + YOLO detección de objetos.
 
     """
@@ -30,8 +32,10 @@ class VisionSystem:
 
     def detect_pose(self, frame) -> Optional[np.ndarray]:
         """
+
         Devuelve un array (17, 2) con los puntos clave de la primera persona,
         en coordenadas de imagen (x, y). Si no hay persona, devuelve None.
+
         """
         results = self.pose_model(frame, verbose=False)
         if not results:
@@ -50,6 +54,7 @@ class VisionSystem:
         self, frame
     ) -> Optional[Tuple[np.ndarray, float]]:
         """
+
         Detiene la clase objetivo en el frame.
         Devuelve (bbox_xyxy, conf) si lo encuentra, o None si no.
         bbox_xyxy: np.array([x1, y1, x2, y2])
@@ -88,9 +93,9 @@ class VisionSystem:
 
     @staticmethod
     def bbox_to_blob_metrics(
-        bbox_xyxy: np.ndarray, frame_shape
-    ) -> Tuple[float, float, float]:
+        bbox_xyxy: np.ndarray, frame_shape) -> Tuple[float, float, float]:
         """
+
         Convierte un bbox en (blob_size, blob_x, blob_y).
 
         - blob_size = área relativa (0..1)

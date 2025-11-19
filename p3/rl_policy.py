@@ -1,3 +1,6 @@
+
+######################################################### POLÍTICA RL #####################################################################
+
 from typing import Tuple
 
 import numpy as np
@@ -5,7 +8,7 @@ import numpy as np
 import config
 
 
-# ------------------------- Discretización -------------------------
+### DISCRETIZACIÓN ###
 
 def _digitize(value: float, bins):
     """
@@ -28,17 +31,16 @@ def discretize_state(blob_size: float, blob_x: float, blob_y: float) -> Tuple[in
     return isize, ix, iy
 
 
-# ------------------------- Política heurística sencilla -----------------------------
+
+### POLÍTICA HEURÍSTICA (BASELINE) ###
 
 class HeuristicRLBaseline:
     """
-    Política simple basada en reglas:
+    Política basada en reglas:
     - Si blob_x > 0: girar derecha
     - Si blob_x < 0: girar izquierda
     - Si blob_size es pequeño: avanzar
     - Si blob_size muy grande: parar
-
-    Esto NO es RL real, pero la interfaz es la misma que un RL.
 
     """
 
@@ -58,13 +60,14 @@ class HeuristicRLBaseline:
             return _action_index_from_name("FORWARD")
 
 
-# ------------------------- Política real (plantilla Q-table) ------------------------
+
+### POLÍTICA REAL (PLANTILLA Q-TABLE) ###
 
 class QTablePolicy:
     """
-    Ejemplo de cómo podrías cargar una Q-table de la práctica 1.
-    Adapta este código a tu propia implementación si ya la tienes.
 
+    Cargar la QTable (ns si estoy hay que tenerlo 100% pero bue)
+   
     """
 
     def __init__(self, qtable_path: str):
@@ -79,11 +82,13 @@ class QTablePolicy:
         return int(np.argmax(q_values))
 
 
-# ------------------------- Helpers -----------------------------
+
+### HELPERS ###
 
 
 def _action_index_from_name(name: str) -> int:
     """
+    
     Dado un nombre de acción ("FORWARD", etc.) devuelve el índice correspondiente.
     Si no existe, devuelve índice de STOP.
 
@@ -101,6 +106,7 @@ def _action_index_from_name(name: str) -> int:
 
 def load_policy():
     """
+
     Devuelve un objeto con método .predict(obs) compatible con Stable-Baselines.
 
     """
