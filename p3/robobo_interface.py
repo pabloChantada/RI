@@ -1,5 +1,6 @@
 import signal
 import sys
+import time
 from typing import Optional, Tuple
 
 import cv2
@@ -37,6 +38,10 @@ class RoboboInterface:
         self.rob.setStreamFps(20)
         self.rob.setCameraFps(20)
         self.rob.startStream()
+
+        # Dar tiempo a que el stream de vídeo se estabilice
+        print("[Robobo] Esperando a que el stream de vídeo se inicie...")
+        time.sleep(1)
 
         self._connected = True
         print("[Robobo] Conexión establecida.")
