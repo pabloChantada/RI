@@ -1,17 +1,12 @@
 import numpy as np
 from ultralytics import YOLO
 
-# -----------------------------
-# MODELO DE POSE (YOLO)
-# -----------------------------
 POSE_MODEL_PATH = "yolo11n-pose.pt"
 pose_model = YOLO(POSE_MODEL_PATH)
 
 
-# -----------------------------
-# DETECCIÓN DE GESTOS
-# -----------------------------
 def get_keypoint(kps, index):
+    """Return (x, y, conf) for a keypoint index or (None, None, 0.0) if missing."""
     if kps is None or index >= len(kps):
         return None, None, 0.0
     return kps[index, 0], kps[index, 1], kps[index, 2]
@@ -19,27 +14,24 @@ def get_keypoint(kps, index):
 
 def detect_gesture_from_pose(keypoints):
     """
-    Gestos definidos:
+    Map YOLO pose keypoints to a discrete gesture.
 
-        - brazos abajo              -> "STOP"
-        - dos brazos arriba         -> "FORWARD"
-        - solo brazo derecho arriba -> "RIGHT"
-        - solo brazo izquierdo arriba -> "LEFT"
-
-    Keypoints en formato COCO:
-        5: left_shoulder,  6: right_shoulder
-        9: left_wrist,    10: right_wrist
+    Gestures:
+      - both arms down              -> "STOP"
+      - both arms up                -> "FORWARD"
+      - only right arm up           -> "RIGHT"
+      - only left arm up            -> "LEFT"
     """
     if keypoints is None:
         return None
 
-    # hombros y muñecas
+    # shoulders and wrists (COCO keypoint indices)
     l_sh_x, l_sh_y, c_lsh = get_keypoint(keypoints, 5)
     r_sh_x, r_sh_y, c_rsh = get_keypoint(keypoints, 6)
     l_wr_x, l_wr_y, c_lwr = get_keypoint(keypoints, 9)
     r_wr_x, r_wr_y, c_rwr = get_keypoint(keypoints, 10)
 
-    # si hombros muy poco fiables, no inferimos gesto
+    # require reasonably confident shoulders
     if c_lsh < 0.3 or c_rsh < 0.3:
         return None
 
@@ -53,9 +45,8 @@ def detect_gesture_from_pose(keypoints):
     right_up = False
 
     if c_lwr > 0.3:
-        # >0 si muñeca por encima del hombro
-        rel_y_left = (l_sh_y - l_wr_y) / shoulder_dist
-        left_up = rel_y_left > 0.4  # umbral ajustable
+        rel_y_left = (l_sh_y - l_wr_y) / shoulder_dist  # >0 if wrist above shoulder
+        left_up = rel_y_left > 0.4
 
     if c_rwr > 0.3:
         rel_y_right = (r_sh_y - r_wr_y) / shoulder_dist
@@ -73,9 +64,11 @@ def detect_gesture_from_pose(keypoints):
 
 def run_pose_inference(frame, conf=0.5, imgsz=320):
     """
-    Ejecuta YOLO pose sobre un frame y devuelve:
-        - keypoints (np.array [N_kps, 3]) o None
-        - results (objeto ultralytics completo)
+    Run YOLO pose on a BGR frame.
+
+    Returns:
+      keypoints: np.array [N_kps, 3] or None (x, y, conf)
+      results: raw ultralytics result object
     """
     results = pose_model(frame, conf=conf, imgsz=imgsz, verbose=False)
 
