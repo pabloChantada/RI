@@ -2,42 +2,26 @@ import numpy as np
 from ultralytics import YOLO
 from stable_baselines3 import SAC
 
-"""
-ar_control_real.py
+SAC_MODEL_PATH = "sac_cylinder_final.zip"
+OBJECT_MODEL_PATH = "yolo11n.pt"  # COCO object model
 
-Funciones para:
- - detectar objeto con YOLO (sobre una imagen/stream real o robobo camera)
- - convertir bounding box -> features compatibles con la práctica 1 (obs 8D)
- - cargar y ejecutar la política SAC (ya entrenada) sobre esa observación
+# COCO label id for 'bottle' (verified beforehand)
+TARGET_CLASS_ID = 39
 
-Rutas a modelos: ajusta SAC_MODEL_PATH y OBJECT_MODEL_PATH según tu árbol.
-"""
-
-# -----------------------------
-# RUTAS / MODELOS
-# -----------------------------
-SAC_MODEL_PATH = "sac_cylinder_final.zip"  # ajustar si hace falta
-OBJECT_MODEL_PATH = "yolo11n.pt"  # tu modelo de objetos (COCO o custom)
-
-# Cargar modelos
+# Load models once at import
 ar_model = SAC.load(SAC_MODEL_PATH, device="cpu")
 object_model = YOLO(OBJECT_MODEL_PATH)
 
-# Ajustar según la clase que representa vuestro objeto en el modelo YOLO
-TARGET_CLASS_ID = 0  # cambiar si no es la clase 0
 
-
-# -----------------------------
-# YOLO-OBJETO -> FEATURES
-# -----------------------------
 def extract_object_features(result, frame_width, frame_height):
     """
-    A partir de la salida de YOLO-OBJETOS (un 'result' de ultralytics),
-    devuelve:
-        visible (bool),
-        x_norm_01, y_norm_01: centro del bbox normalizado [0,1],
-        size_norm_01: área normalizada [0,1],
-        box_xyxy: (x1,y1,x2,y2) del bbox (opcional, para debug)
+    Extract normalized features for the target class from a YOLO result.
+
+    Returns:
+      visible (bool),
+      x_norm_01, y_norm_01: bbox center in [0, 1],
+      size_norm_01: relative area in [0, 1],
+      box_xyxy: (x1, y1, x2, y2) or None.
     """
     if result is None or len(result.boxes) == 0:
         return False, 0.0, 0.0, 0.0, None
@@ -51,7 +35,6 @@ def extract_object_features(result, frame_width, frame_height):
             best_conf = conf
             best_box = box
 
-    # si no hay caja de la clase objetivo
     if best_box is None:
         return False, 0.0, 0.0, 0.0, None
 
@@ -71,8 +54,10 @@ def extract_object_features(result, frame_width, frame_height):
 
 def run_object_inference(frame, conf=0.5, imgsz=320):
     """
-    Ejecuta YOLO-OBJETOS sobre un frame (numpy BGR) y devuelve:
-        visible, x_n, y_n, size_n, result, box
+    Run YOLO object detection on a BGR frame.
+
+    Returns:
+      visible, x_n, y_n, size_n, result, box_xyxy
     """
     results = object_model(frame, conf=conf, imgsz=imgsz, verbose=False)
     if len(results) == 0:
@@ -84,9 +69,6 @@ def run_object_inference(frame, conf=0.5, imgsz=320):
     return visible, x_n, y_n, size_n, r0, box
 
 
-# -----------------------------
-# BUILD OBS 8D (compatible P1)
-# -----------------------------
 def build_ar_observation_from_yolo(
     obj_visible,
     obj_x_norm_01,
@@ -96,13 +78,12 @@ def build_ar_observation_from_yolo(
     target_pos=None,
 ):
     """
-    Construye la observación 8D usada en P1:
+    Build the 8D observation used in P1:
+
       [agent_x_norm, agent_z_norm, target_x_norm, target_z_norm,
        blob_visible, blob_x_norm, blob_y_norm, blob_size_norm]
 
-    - obj_x_norm_01, obj_y_norm_01 en [0,1] (imagen)
-    - obj_size_norm_01 en [0,1] (area relativa)
-    - agent_pos/target_pos: opcional (x,z) reales para normalizar; si None -> zeros.
+    The "blob" here is the detected bottle.
     """
     if agent_pos is None:
         agent_x_norm = 0.0
@@ -122,7 +103,7 @@ def build_ar_observation_from_yolo(
 
     visible = 1.0 if obj_visible else 0.0
 
-    # YOLO centro [0,1] -> blob_x_norm [-1,1] centrado (igual que p1)
+    # Image [0, 1] -> centered [-1, 1] as in P1
     blob_x_norm = float(np.clip((obj_x_norm_01 - 0.5) * 2.0, -1.0, 1.0))
     blob_y_norm = float(np.clip((obj_y_norm_01 - 0.5) * 2.0, -1.0, 1.0))
     blob_size_norm = float(np.clip(obj_size_norm_01, 0.0, 1.0))
@@ -143,13 +124,12 @@ def build_ar_observation_from_yolo(
     return obs_8d
 
 
-# -----------------------------
-# AR policy step (obs 8D -> action)
-# -----------------------------
 def ar_policy_step_from_obs(obs_8d: np.ndarray):
     """
-    Ejecuta la política SAC (P1) sobre obs_8d y devuelve acción [a_left, a_right]
-    en [-1,1].
+    Run the P1 SAC policy on an 8D observation.
+
+    Returns:
+      action: np.ndarray [a_left, a_right] in [-1, 1]
     """
     action, _ = ar_model.predict(obs_8d, deterministic=True)
     return action
