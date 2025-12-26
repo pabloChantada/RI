@@ -1,0 +1,16 @@
+VISUALSOAR
+export JAVA_HOME=/opt/homebrew/Cellar/openjdk/25.0.1/libexec/openjdk.jdk/Contents/Home
+export PATH=$JAVA_HOME/bin:$PATH
+bash SoarSuite_9.6.4-Multiplatform/VisualSoar.sh
+
+DEBUGGER
+export JAVA_HOME=/opt/homebrew/Cellar/openjdk/25.0.1/libexec/openjdk.jdk/Contents/Home
+export PATH=$JAVA_HOME/bin:$PATH
+cd SoarSuite_9.6.4-Multiplatform
+bash SoarJavaDebugger.sh
+
+PERMANENT:
+
+echo 'export JAVA_HOME=/opt/homebrew/Cellar/openjdk/25.0.1/libexec/openjdk.jdk/Contents/Home' >> ~/.zshrc
+echo 'export PATH=$echo 'export JAVA_HOME=/opt/homebrew/Cellar/openjdk/25.0.1/libexec/openjdk.jdk/Contents/Home' >> ~/.zshrc
+echo 'export PATH=$
