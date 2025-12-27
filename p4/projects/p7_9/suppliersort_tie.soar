@@ -1,0 +1,104 @@
+# 1. NOMBRAR EL SUBESTADO
+# Detectamos que estamos en un empate (tie) y lo llamamos 'suppliersort-tie'
+sp {elaborate*suppliersort-tie*name
+    (state <s> ^superstate.name suppliersort-main
+               ^impasse tie)
+    -->
+    (write |** Entrando en Subestado (Tie Impasse) **| (crlf))
+    (<s> ^name suppliersort-tie)}
+
+# 2. COPIAR PRIORIDADES
+# Bajamos la estructura de prioridades del input-link al subestado para usarlas fácil
+sp {elaborate*suppliersort-tie*priorities
+    (state <s> ^name suppliersort-tie
+               ^superstate.io.input-link.priorities <p>)
+    -->
+    (<s> ^priorities <p>)}
+
+# 3. PROPONER EVALUAR UN PESO (Evaluate Weight)
+# Si hay un peso en prioridades que NO ha sido evaluado aún, proponemos evaluarlo.
+sp {propose*suppliersort-tie*evaluate-weight
+    (state <s> ^name suppliersort-tie
+               ^priorities.<attr> <weight>)
+    (<s> -^weight-evaluated <weight>) # Condición negativa: no evaluado todavía
+    -->
+    (<s> ^operator <o> + =)
+    (<o> ^name evaluate-weight
+        ^weight <weight>
+        ^attribute <attr>)}
+
+# 4. PREFERIR PESOS MÁS ALTOS
+# Ordenamos los operadores 'evaluate-weight' para que se hagan del peso más alto al más bajo
+sp {prefer*suppliersort-tie*evaluate-weight*higher-weight
+    (state <s> ^name suppliersort-tie
+               ^operator <o1> +
+               ^operator <o2> +)
+    (<o1> ^name evaluate-weight ^weight <w1>)
+    (<o2> ^name evaluate-weight ^weight < <w1>)
+    -->
+    (<s> ^operator <o1> > <o2>)}
+
+# 5. APLICAR: CREAR PREFERENCIAS EN EL SUPERESTADO
+# Cuando seleccionamos un peso, comparamos los proveedores en el nivel superior usando ese atributo
+sp {apply*suppliersort-tie*evaluate-weight*prefer*by-value
+    (state <s> ^operator <o>
+               ^superstate <ss>
+               ^item <o1>
+               ^item <o2>)
+    (<o> ^name evaluate-weight
+         ^attribute {<attr> <> total-cost}) # Para atributos que NO sean costo (mayor es mejor)
+    
+    # Datos del proveedor 1
+    (<o1> ^supplier <sup1>)
+    (<sup1> ^<attr> <v1>)
+    
+    # Datos del proveedor 2 (tiene menos valor)
+    (<o2> ^supplier <sup2>)
+    (<sup2> ^<attr> < <v1>)
+    -->
+    # Decimos al superestado que o1 es mejor que o2
+    (<ss> ^operator <o1> > <o2>)}
+
+# Regla especial para COSTO (menor es mejor)
+sp {apply*suppliersort-tie*evaluate-weight*prefer*by-total-cost
+    (state <s> ^operator <o>
+               ^superstate <ss>
+               ^item <o1>
+               ^item <o2>)
+    (<o> ^name evaluate-weight
+         ^attribute total-cost)
+    
+    (<o1> ^supplier <sup1>)
+    (<sup1> ^total-cost <v1>)
+    
+    (<o2> ^supplier <sup2>)
+    (<sup2> ^total-cost > <v1>) # o2 es más caro, así que es peor
+    -->
+    (<ss> ^operator <o1> > <o2>)}
+
+# 6. MARCAR PESO COMO EVALUADO
+# Una vez usada la regla anterior, marcamos el peso para pasar al siguiente en el próximo ciclo
+sp {apply*suppliersort-tie*evaluate-weight*weight-evaluated
+    (state <s> ^operator <o>)
+    (<o> ^name evaluate-weight
+        ^weight <w>)
+    -->
+    (write |   Peso evaluado: | <w> (crlf))
+    (<s> ^weight-evaluated <w>)}
+    
+# 7. ROMPER EMPATES FINALES (Default)
+# Si llegamos aquí y siguen empatados (ej. mismos atributos), usamos total-score como último recurso
+sp {propose*suppliersort-tie*break-attr-tie
+    (state <s> ^name suppliersort-tie)
+    -->
+    (<s> ^operator <o> + <) # Preferencia 'worst' para que sea lo último
+    (<o> ^name break-attr-tie)}
+
+sp {apply*suppliersort-tie*break-attr-tie*prefer-total-score
+    (state <s> ^operator.name break-attr-tie
+               ^superstate <ss>
+               ^item <o1> ^item <o2>)
+    (<o1> ^supplier.total-score <v1>)
+    (<o2> ^supplier.total-score < <v1>)
+    -->
+    (<ss> ^operator <o1> > <o2>)}

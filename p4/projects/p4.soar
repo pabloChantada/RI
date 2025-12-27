@@ -1,0 +1,23 @@
+# Archivo: instructor_solution.soar (Project 04)
+
+# PROPUESTA: Proponer salida con preferencia "peor" (se ejecuta al final)
+sp {propose*suppliersort-main*output-suppliers
+    (state <s> ^selected <sup>)
+    -->
+    (<s> ^operator <o> + < =) # < es preferencia 'worst'
+    (<o> ^name output-suppliers)}
+
+# APLICACIÓN: Copiar resultados al output-link y limpiar memoria
+sp {apply*suppliersort-main*output-suppliers
+    (state <s> ^io.output-link <ol>
+            ^operator.name output-suppliers
+            ^selected <sup>)
+    (<sup> ^name <sup-name>)
+    -->
+    # Enviar al entorno
+    (<ol> ^recommended-supplier <sup-name>)
+    # Limpiar memoria de trabajo
+    (<s> ^selected <sup> -)
+    (write |* Recommended | <sup-name> (crlf))
+    # Detener el agente
+    (interrupt)}

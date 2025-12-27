@@ -1,0 +1,84 @@
+### This is for testing/training purposes only.
+### Normally, you should never use productions to modify the input-link.
+
+
+sp {elaborate*suppliersort-main*mock-input*config
+    (state <s> ^io.input-link <il>)
+    -->
+    (<il> ^priorities <p-new>
+            ^settings.max-output-suppliers 3)
+    (<p-new> ^total-cost 11.01
+            ^sustainability 11
+            ^quality 11
+            ^availability 8
+            ^packaging 8
+            ^speed 7)
+    }
+
+sp {elaborate*suppliersort-main*mock-input*suppliers
+    (state <s> ^io.input-link <il>)
+    -->
+    (<il> ^candidate-supplier <cs-01> <cs-02> <cs-03> <cs-04> 
+        <cs-05> <cs-06> 
+        )
+
+    (<cs-01> ^name |supplier01|
+            ^total-score 12
+            ^total-cost 35.0
+            ^total-sats 2
+            ^sustainability 3
+            ^availability 3
+            ^quality 1
+            ^packaging 3
+            ^speed 2)
+
+    (<cs-02> ^name |supplier02|
+            ^total-score 9
+            ^total-cost 35.0
+            ^total-sats 2
+            ^sustainability 2
+            ^availability 2
+            ^quality 3
+            ^packaging 1
+            ^speed 1)
+
+    (<cs-03> ^name |supplier03|
+            ^total-score 13
+            ^total-cost 25.0
+            ^total-sats 1
+            ^sustainability 3
+            ^availability 3
+            ^quality 3
+            ^packaging 3
+            ^speed 1)
+
+    (<cs-04> ^name |supplier04|
+            ^total-score 11
+            ^total-cost 25.0
+            ^total-sats 2
+            ^sustainability 3
+            ^availability 3
+            ^quality 2
+            ^packaging 2
+            ^speed 1)
+
+    (<cs-05> ^name |supplier05|
+            ^total-score 14
+            ^total-cost 25.0
+            ^total-sats 1
+            ^sustainability 3
+            ^availability 3
+            ^quality 3
+            ^packaging 3
+            ^speed 2)
+
+    (<cs-06> ^name |supplier06|
+            ^total-score 10
+            ^total-cost 35.0
+            ^total-sats 0
+            ^sustainability 2
+            ^availability 3
+            ^quality 1
+            ^packaging 3
+            ^speed 1)
+    }

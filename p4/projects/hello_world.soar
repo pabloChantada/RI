@@ -1,0 +1,9 @@
+# Archivo: instructor_solution.soar (Project 01)
+
+sp {hello*world
+    "Your first Soar rule!"
+    # Condición: Verificar que existe un estado (siempre es verdad al inicio)
+    (state <s> ^type state)
+    -->
+    # Acción: Imprimir mensaje en el depurador
+    (write |Hello world!| (crlf))}

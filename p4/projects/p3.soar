@@ -1,0 +1,29 @@
+# Archivo: instructor_solution.soar (Project 03)
+
+# 1. PROPUESTA: Proponer seleccionar un proveedor si no ha sido seleccionado aún
+sp {propose*suppliersort-main*select-supplier
+    (state <s> ^io.input-link.candidate-supplier <sup>
+            -^selected <sup>) # Condición negativa: No seleccionado previamente
+    -->
+    (<s> ^operator <o> +)
+    (<o> ^name select-supplier
+        ^supplier <sup>)}
+
+# 2. PREFERENCIA: Preferir proveedores con mayor puntaje total
+sp {prefer*suppliersort-main*select-supplier*total-score
+    (state <s> ^operator <o1> +
+                ^operator <o2> +)
+    (<o1> ^name select-supplier ^supplier.total-score <sup1-score>)
+    (<o2> ^name select-supplier ^supplier.total-score < <sup1-score>)
+    -->
+    (<s> ^operator <o1> > <o2>)}
+
+# 3. APLICACIÓN: Marcar el proveedor como seleccionado en la memoria
+sp {apply*suppliersort-main*select-supplier
+    (state <s> ^operator <o>)
+    (<o> ^name select-supplier
+        ^supplier <sup>)
+    (<sup> ^name <sup-name> ^total-score <sup-score>)
+    -->
+    (write |Selected supplier "| <sup-name> |" (total-score = | <sup-score> |)| (crlf))
+    (<s> ^selected <sup>)} # Persistencia en el estado

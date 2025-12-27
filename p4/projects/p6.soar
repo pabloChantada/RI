@@ -1,0 +1,94 @@
+# 1. Cargar el entorno de entrada (asegúrate de que la ruta sea correcta)
+# source "../fake_agent_input.soar" 
+# hacer init-soar para que se pueda crear el subestado, sino nos queda con 0 reglas
+
+############################################################
+##  PROBLEM SPACE: MAIN (Nivel Superior)
+############################################################
+
+# Inicialización del estado
+sp {propose*suppliersort-main*init
+    (state <s> ^superstate nil -^name suppliersort-main)
+    -->
+    (<s> ^operator <o> + !)
+    (<o> ^name init)}
+
+sp {apply*suppliersort-main*init
+    (state <s> ^operator.name init)
+    -->
+    (<s> ^name suppliersort-main)}
+
+# PROPUESTA: Proponemos proveedores. 
+# IMPORTANTE: No debe haber ninguna regla de preferencia (>) aquí para forzar el empate.
+sp {propose*suppliersort-main*select-supplier
+    (state <s> ^name suppliersort-main
+               ^io.input-link.candidate-supplier <sup>
+              -^selected <sup>)
+    -->
+    (<s> ^operator <o> +) # Solo preferencia 'acceptable'
+    (<o> ^name select-supplier
+        ^supplier <sup>)}
+
+# REGLAS DE APLICACIÓN (Multi-Apply del Cap 5)
+sp {apply*suppliersort-main*select-supplier*mark-selected
+    (state <s> ^operator <o>)
+    (<o> ^name select-supplier ^supplier <sup>)
+    -->
+    (<s> ^selected <sup>)}
+
+sp {apply*suppliersort-main*select-supplier*print
+    (state <s> ^operator <o>)
+    (<o> ^name select-supplier ^supplier <sup>)
+    (<sup> ^name <name> ^total-score <score>)
+    -->
+    (write |Selected supplier: | <name> | (Score: | <score> |)| (crlf))}
+
+############################################################
+##  PROBLEM SPACE: TIE SUBSTATE (Resolución del Empate)
+############################################################
+
+# Identificar el impasse de empate y nombrar el subestado
+sp {elaborate*suppliersort-tie*name
+    (state <s> ^superstate.name suppliersort-main
+               ^impasse tie)
+    -->
+    (write |** Entrando en Subestado para desempatar...| (crlf))
+    (<s> ^name suppliersort-tie)}
+
+# Operador interno del subestado para romper el empate
+sp {propose*suppliersort-tie*break-attr-tie
+    (state <s> ^name suppliersort-tie)
+    -->
+    (<s> ^operator <o> +)
+    (<o> ^name break-attr-tie)}
+
+# APLICAR: Esta regla resuelve el conflicto en el SUPERESTADO
+sp {apply*suppliersort-tie*break-attr-tie*prefer-total-score
+    (state <s> ^operator.name break-attr-tie
+               ^superstate <ss>)
+    (<s> ^item <o1> ^item <o2>)
+    (<o1> ^supplier <sup1>)
+    (<o2> ^supplier <sup2>)
+    (<sup1> ^name <n1> ^total-score <v1>)
+    (<sup2> ^name <n2> ^total-score < <v1>)
+    -->
+    (write |   (Subestado decide: | <n1> | > | <n2> |)| (crlf))
+    (<ss> ^operator <o1> > <o2>)} # Devolvemos la preferencia al superestado
+
+############################################################
+##  FINALIZACIÓN (Halt)
+############################################################
+
+sp {propose*suppliersort-main*done
+    (state <s> ^name suppliersort-main)
+    -(state <s> ^io.input-link.candidate-supplier <c-unsorted>
+                -^selected <c-unsorted>)
+    -->
+    (<s> ^operator <o> + < =)
+    (<o> ^name done)}
+
+sp {apply*suppliersort-main*done
+    (state <s> ^operator.name done)
+    -->
+    (write |Todos los proveedores ordenados via Subestados. Parando.| (crlf))
+    (halt)}

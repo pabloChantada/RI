@@ -1,0 +1,100 @@
+# Cargar producciones anteriores (Proyectos 2 y 3 principalmente)
+# Nota: No cargamos el código del Proyecto 4 porque esa lógica de salida diferida la vamos a reemplazar.
+load file "p2.soar"
+
+# cd ".."
+# load file "fake_agent_input.soar"
+
+
+##############################
+##  OPERATOR: select-supplier
+# Propuesta y Preferencia (Igual que en Proyecto 3)
+##############################
+
+# PROPUESTA: Proponer operadores para proveedores no seleccionados aún
+sp {propose*suppliersort-main*select-supplier
+    "Propose any supplier given on the input-link. Multiple suppliers should tie."
+    (state <s> ^io.input-link.candidate-supplier <sup>
+            -^selected <sup>)
+    -->
+    (<s> ^operator <o> +)
+    (<o> ^name select-supplier
+        ^supplier <sup>)}
+
+# PREFERENCIA: Ordenar por puntaje total
+sp {prefer*suppliersort-main*select-supplier*total-score
+    "Prefer suppliers in decreasing order of total-score"
+    (state <s> ^operator <o1> +
+                ^operator <o2> +)
+    (<o1> ^name select-supplier ^supplier.total-score <sup1-score>)
+    (<o2> ^name select-supplier ^supplier.total-score < <sup1-score>)
+    -->
+    (<s> ^operator <o1> > <o2>)}
+
+##############################
+##  MULTI-APPLY RULES
+# Múltiples reglas 'apply' para el mismo operador 'select-supplier'
+##############################
+
+# REGLA APPLY 1: Marcar como seleccionado (Gestión del estado interno)
+sp {apply*suppliersort-main*select-supplier*mark-selected
+    (state <s> ^operator <o>)
+    (<o> ^name select-supplier
+        ^supplier <sup>)
+    -->
+    (<s> ^selected <sup>)}
+
+# REGLA APPLY 2: Salida al entorno (Gestión de IO)
+# Esta regla se dispara simultáneamente con la anterior para el mismo operador
+sp {apply*suppliersort-main*select-supplier*output
+    (state <s> ^io.output-link <ol>
+            ^operator <o>)
+    (<o> ^name select-supplier
+        ^supplier <sup>)
+    (<sup> ^name <name>)
+    -->
+    # Enviar al output-link inmediatamente
+    (<ol> ^recommended-supplier <name>)}
+
+# REGLA APPLY 3: Impresión en pantalla (Feedback usuario)
+sp {apply*suppliersort-main*select-supplier*print
+    (state <s> ^operator <o>)
+    (<o> ^name select-supplier
+        ^supplier <sup>)
+    (<sup> ^name <name> ^total-score <score>)
+    -->
+    (write |Selected supplier: | <name> | (Score: | <score> |)| (crlf))}
+
+##############################
+##  Finalización
+##############################
+
+# Si no quedan proveedores por seleccionar (Condition: State No Change), detener.
+# Nota: En Soar puro, esto a veces se maneja con un operador 'wait' o detectando el estado final.
+# Para este ejercicio, al agotarse los operadores 'select-supplier', el agente se detendrá (halt) 
+# o entrará en un subestado si no hay nada más que hacer.
+
+##############################
+##  FINISH / HALT RULES
+##############################
+
+# PROPUESTA CORREGIDA
+sp {propose*suppliersort-main*done
+    "Si todos los candidatos en input-link ya están en la lista 'selected', terminamos."
+    (state <s> ^io.input-link.candidate-supplier <cand>)
+    # Verificamos que NO exista un candidato que NO esté seleccionado
+    -(state <s> ^io.input-link.candidate-supplier <c-unsorted>
+                -^selected <c-unsorted>)
+    -->
+    # '+' = Propuesto
+    # '<' = Worst (hazlo solo si no hay nada más)
+    # '=' = Indifferent (si hay varios 'done', elige cualquiera, no te bloquees)
+    (<s> ^operator <o> + < =) 
+    (<o> ^name done)}
+
+# APLICACIÓN (Esta estaba bien)
+sp {apply*suppliersort-main*done
+    (state <s> ^operator.name done)
+    -->
+    (write |All suppliers sorted. Halting.| (crlf))
+    (halt)}

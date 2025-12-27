@@ -1,0 +1,19 @@
+# Archivo: instructor_solution.soar (Project 02)
+
+# Cargar el entorno simulado (input falso)
+# cd ".."
+# load file "fake_agent_input.soar"
+
+# Regla para imprimir nombres de proveedores detectados en la entrada
+sp {elaborate*suppliersort-main*input*supplier-name
+    "Print any input candidate supplier names"
+    (state <s> ^io.input-link.candidate-supplier.name <sup-name>)
+    -->
+    (write |INPUT: Supplier candidate: | <sup-name> (crlf))}
+
+# Regla para imprimir pesos de prioridades (usando variable <attr> para el nombre del atributo)
+sp {elaborate*suppliersort-main*input*config-priorities
+    "Print any input priority weights"
+    (state <s> ^io.input-link.priorities.<attr> <weight>)
+    -->
+    (write |INPUT WEIGHT: | <attr> |: | <weight> (crlf))}

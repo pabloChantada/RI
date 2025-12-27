@@ -1,0 +1,83 @@
+# REGLA DE INICIALIZACIÓN Y NOMBRE DEL ESTADO
+sp {propose*suppliersort-main*init
+    (state <s> ^superstate nil -^supplier-list)
+    -->
+    (<s> ^operator <o> + !)
+    (<o> ^name init)}
+
+sp {apply*suppliersort-main*init
+    (state <s> ^operator.name init)
+    -->
+    (<s> ^name suppliersort-main
+         ^supplier-list <cr-new>)
+    (<cr-new> ^count 0)}
+
+# LIMPIEZA DEL OUTPUT (Cap 9)
+sp {apply*suppliersort-main*reset-output
+    (state <s> ^operator.name init ^io.output-link <ol>)
+    (<ol> ^supplier-list <any>)
+    -->
+    (<ol> ^supplier-list <any> -)}
+
+# PROPUESTA DE SELECCIÓN (Cap 9)
+sp {propose*suppliersort-main*select-supplier
+    (state <s> ^io.input-link.candidate-supplier <sup>
+                ^supplier-list <sup-list>)
+    (<sup> ^name <name>)
+    (<sup-list> -^supplier.name <name>) # Si no está ya en la lista
+    -->
+    (<s> ^operator <o> +)
+    (<o> ^name select-supplier ^supplier <sup>)}
+
+# PREFERENCIAS Y RECHAZOS (Cap 9)
+# 1. Preferir los que cumplan más requisitos
+sp {prefer*suppliersort-main*select-supplier*total-sats
+    (state <s> ^operator <o1> + ^operator <o2> +)
+    (<o1> ^name select-supplier ^supplier.total-sats <y1>)
+    (<o2> ^name select-supplier ^supplier.total-sats < <y1>)
+    -->
+    (<s> ^operator <o1> > <o2>)}
+
+# 2. RECHAZAR si no cumple ningún requisito (Reject -)
+sp {prefer*suppliersort-main*select-supplier*reject*missing-required-binary
+    (state <s> ^operator <o1> +)
+    (<o1> ^name select-supplier ^supplier.total-sats 0)
+    -->
+    (write |Rejecting supplier due to 0 sats.| (crlf))
+    (<s> ^operator <o1> -)}
+
+# 3. RECHAZAR si excedemos el límite (ej. Top 3)
+sp {prefer*suppliersort-main*select-supplier*reject*excess-count
+    (state <s> ^operator <o1> +
+                ^supplier-list.count >= <max-count>
+                ^io.input-link.settings.max-output-suppliers <max-count>)
+    (<o1> ^name select-supplier)
+    -->
+    (<s> ^operator <o1> -)}
+
+# APLICACIÓN: CONSTRUIR LA LISTA ENLAZADA (Cap 9)
+sp {apply*suppliersort-main*select-supplier*append
+    (state <s> ^operator <o> ^supplier-list <sup-list>)
+    (<o> ^name select-supplier ^supplier.name <sup-name>)
+    (<sup-list> ^count <count>)
+    -->
+    (<sup-list> ^supplier <sup-new> ^count <count> - ^count (+ 1 <count>))
+    (<sup-new> ^name <sup-name> ^rank (+ 1 <count>))} 
+    # (Nota: La lógica de lista enlazada completa se simplifica aquí por brevedad, 
+    # el concepto clave es que se agrega a la estructura local ^supplier-list)
+
+# SALIDA FINAL
+sp {propose*suppliersort-main*output-supplier-list
+    (state <s> ^supplier-list <sup-list>)
+    -->
+    (<s> ^operator <o> + <) # Preferencia Worst
+    (<o> ^name output-supplier-list)}
+
+sp {apply*suppliersort-main*output-supplier-list
+    (state <s> ^operator.name output-supplier-list
+        ^supplier-list <sup-list>
+        ^io.output-link <ol>)
+    -->
+    (<ol> ^supplier-list <sup-list>)
+    (<s> ^supplier-list <sup-list> -) # Limpiar memoria para reiniciar
+    (interrupt)}
